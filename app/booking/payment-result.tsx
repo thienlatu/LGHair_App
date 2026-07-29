@@ -7,6 +7,8 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import PrimaryButton from '../../components/PrimaryButton';
 import { Colors } from '../../constants/Colors';
 import { Theme } from '../../constants/Theme';
+import { bookingApi } from '../../src/services/bookingApi';
+import { useCartStore } from '../../src/stores/useCartStore';
 
 export default function PaymentResultScreen() {
   const router = useRouter();
@@ -14,25 +16,50 @@ export default function PaymentResultScreen() {
   const params = useLocalSearchParams();
   const [status, setStatus] = useState<'success' | 'failed' | 'loading'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
-  useEffect(() => {
+useEffect(() => {
     const responseCode = params.vnp_ResponseCode as string;
     const isCOD = params.isCOD as string;
-    
-    if (isCOD === 'true') {
-      setStatus('success');
-    } else if (responseCode) {
-      if (responseCode === '00') {
+    const maHd = params.maHd as string; // Lấy mã hóa đơn truyền từ màn payment sang
+
+    // Tạo một hàm async bên trong useEffect để gọi API
+    const confirmOrderOnServer = async () => {
+      if (isCOD === 'true') {
         setStatus('success');
+        useCartStore.getState().clearCart();
+        useCartStore.getState().resetCart();
+      } else if (responseCode) {
+        if (responseCode === '00') {
+          setStatus('success');
+          useCartStore.getState().clearCart();
+          useCartStore.getState().resetCart();
+        } else {
+          setStatus('failed');
+          setErrorMessage(`Giao dịch thất bại (Mã lỗi: ${responseCode})`);
+          return; // Thất bại thì dừng luôn, không gọi API cập nhật thành công nữa
+        }
       } else {
         setStatus('failed');
-        // You could map VNPay error codes to specific messages here
-        setErrorMessage(`Giao dịch thất bại (Mã lỗi: ${responseCode})`);
+        setErrorMessage('Không nhận được kết quả thanh toán hợp lệ.');
+        return;
       }
-    } else {
-      // Fallback if no params are found, maybe the user cancelled or just navigated here
-      setStatus('failed');
-      setErrorMessage('Không nhận được kết quả thanh toán hợp lệ.');
-    }
+
+      if (maHd) {
+        try {
+          if (maHd.startsWith('SP')) {
+            await bookingApi.confirmProductPayment(maHd, responseCode);
+          } 
+          else if (maHd.startsWith('TH')) {
+            await bookingApi.getReceipt(maHd, responseCode);
+          }
+        } catch (error) {
+          console.log("Lỗi khi xác nhận đơn với Backend:", error);
+        }
+      }
+    };
+
+  
+    confirmOrderOnServer();
+
   }, [params]);
 
   if (status === 'loading') {

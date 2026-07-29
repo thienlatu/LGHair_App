@@ -204,9 +204,9 @@ function OrderCard({ order, onBuyAgain }: { order: any; onBuyAgain: () => void }
             Tổng số tiền:    {formatPrice(order.amount)}
           </Text>
         </View>
-        <Pressable style={styles.buyAgainBtn} onPress={onBuyAgain}>
+        {/* <Pressable style={styles.buyAgainBtn} onPress={onBuyAgain}>
           <Text style={styles.buyAgainText}>Mua lại</Text>
-        </Pressable>
+        </Pressable> */}
       </View>
     </View>
   );

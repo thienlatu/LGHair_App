@@ -22,7 +22,7 @@ import { WebView } from 'react-native-webview';
 import PrimaryButton from '../../components/PrimaryButton';
 import ErrorModal from '../../components/ui/ErrorModal';
 import { useAuthStore } from '../../src/stores/useAuthStore';
-import { bookingApi } from '../../src/services/bookingApi';
+import { bookingApi, BookingFinalRequest } from '../../src/services/bookingApi';
 import { useCheckoutStore } from '../../src/stores/useCheckoutStore';
 import { calculateShippingFee } from '../../src/utils/shippingCalculator';
 
@@ -179,6 +179,7 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
   // States quản lý luồng thanh toán VNPay
   const [paymentUrlToOpen, setPaymentUrlToOpen] = useState<string | null>(null);
   const [pendingMaHd, setPendingMaHd] = useState<string | null>(null);
+  const [isServiceOnlyFlow, setIsServiceOnlyFlow] = useState<boolean>(false);
 
   const [fullName, setFullName] = useState(user?.hoTen || '');
   const [phone, setPhone] = useState(user?.sdt || '');
@@ -353,7 +354,23 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
         }
       };
 
-      // GỌI DUY NHẤT API SUBMIT CHECKOUT (Giống hệt luồng của Web)
+      if (hasService() && !hasProduct()) {
+        // LUỒNG CHỈ ĐẶT DỊCH VỤ (DatDichVu):
+        // Bước 1: Gọi createPayment để lấy link VNPay trước, không gọi submitBooking ngay
+        setIsServiceOnlyFlow(true);
+        const resPay = await bookingApi.createPayment({
+          Amount: dueNow,
+          OrderDescription: 'vnpay',
+        });
+        if (resPay && resPay.url) {
+          setPaymentUrlToOpen(resPay.url);
+        } else {
+          setErrorMsg('Không thể tạo liên kết thanh toán VNPay.');
+        }
+        return;
+      }
+
+      setIsServiceOnlyFlow(false);
       const res = await bookingApi.submitCheckout(payload);
 
       if (res && res.success) {
@@ -622,7 +639,44 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
                   // 3. Chuyển hướng về trang Kết Quả trên App kèm theo toàn bộ QueryString & maHd
                   // Trang Kết Quả sẽ dùng maHd để gọi API get-receipt và kích hoạt gửi mail giống hệt Web
                   if (queryString.includes('vnp_ResponseCode=00')) {
-                    router.replace(`/booking/payment-result?${queryString}&maHd=${pendingMaHd}` as any);
+                    if (isServiceOnlyFlow) {
+                      // BƯỚC 3: KHI THANH TOÁN VNPAY THÀNH CÔNG -> GỌI API LƯU LỊCH HẸN VÀO DB
+                      const randomSuffix = Math.floor(1000 + Math.random() * 9000).toString();
+                      const generatedBookingId = `LD${Date.now()}${randomSuffix}`;
+                      const bookingPayload: BookingFinalRequest = {
+                        MaKh: user?.maKH || 'GUEST',
+                        HoTen: fullName,
+                        Phone: phone,
+                        Email: email,
+                        BookingId: generatedBookingId,
+                        Services: selectedServices.map((s) => ({ Id: s.id, Price: s.price })),
+                        MaCodes: voucherCode ? [voucherCode] : [],
+                        NgayHen: bookingDate && bookingTime
+                          ? new Date(`${bookingDate}T${bookingTime}:00`).toISOString()
+                          : new Date().toISOString(),
+                        InvoiceInfo: {
+                          LaDoanhNghiep: false,
+                          EmailNhanHD: email,
+                          DiaChiXuatHD: 'Nhận tại cửa hàng',
+                        },
+                      };
+
+                      const paymentModeParam = depositMode === 'deposit10' ? '10' : '100';
+                      bookingApi
+                        .submitBooking(bookingPayload, paymentModeParam, stylistId || undefined)
+                        .then((resBooking) => {
+                          clearCheckout();
+                          router.replace(
+                            `/booking/payment-result?${queryString}&maHd=${resBooking.maLd}` as any
+                          );
+                        })
+                        .catch((err) => {
+                          console.log('--- LỖI LƯU ĐẶT LỊCH SAU THANH TOÁN ---', err);
+                          setErrorMsg('Lỗi lưu lịch hẹn sau khi thanh toán thành công.');
+                        });
+                    } else {
+                      router.replace(`/booking/payment-result?${queryString}&maHd=${pendingMaHd}` as any);
+                    }
                   } else {
                     router.replace(`/booking/payment-result?${queryString}` as any);
                   }
