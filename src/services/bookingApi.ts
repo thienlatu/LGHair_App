@@ -80,6 +80,29 @@ export interface ProductCheckoutRequest {
   returnUrl?: string;
 }
 
+export interface BookingFinalRequest {
+  MaKh: string;
+  HoTen: string;
+  Phone: string;
+  Email: string;
+  BookingId: string; // Chuỗi > 10 ký tự, vd: "LD" + Date.now() + Math.floor(...)
+  Services: { Id: string; Price: number }[];
+  MaCodes: string[];
+  NgayHen: string; // ISO 8601 DateTime string
+  InvoiceInfo?: {
+    LaDoanhNghiep: boolean;
+    TenCongTy?: string;
+    Mst?: string;
+    DiaChiXuatHD: string;
+    EmailNhanHD: string;
+  };
+}
+
+export interface BookingFinalResponse {
+  message: string;
+  maLd: string;
+}
+
 export const bookingApi = {
   // Lấy danh sách dịch vụ & combo
   getBookingData: async () => {
@@ -118,7 +141,7 @@ export const bookingApi = {
   },
 
   // Lưu đặt lịch (Chỉ mua dịch vụ)
-  submitBooking: async (payload: any, paymentMode: string, maStylist?: string) => {
+  submitBooking: async (payload: BookingFinalRequest, paymentMode: string, maStylist?: string): Promise<BookingFinalResponse> => {
     const response = await apiClient.post('/api/DatDichVu/save-booking-final', payload, {
       params: { paymentMode, maStylist }
     });
@@ -134,6 +157,26 @@ export const bookingApi = {
   // Lưu đặt hàng sản phẩm (Chỉ mua sản phẩm)
   submitProductOrder: async (payload: ProductCheckoutRequest) => {
     const response = await apiClient.post('/api/ThanhToanSanPham/submit-product-order', payload);
+    return response.data;
+  },
+
+  // =====================================================================
+  // CÁC API XÁC NHẬN THANH TOÁN KHI VNPAY/MOMO TRẢ VỀ (DÙNG Ở TRANG KẾT QUẢ)
+  // =====================================================================
+
+  // 1. Xác nhận cho luồng "Chỉ mua sản phẩm" (Controller: ThanhToanSanPhamController)
+  confirmProductPayment: async (orderId: string, vnp_ResponseCode?: string, resultCode?: string) => {
+    const response = await apiClient.get('/api/ThanhToanSanPham/confirm-payment', {
+      params: { orderId, vnp_ResponseCode, resultCode }
+    });
+    return response.data;
+  },
+
+  // 2. Lấy biên lai và xác nhận cho luồng "Tổng"
+  getReceipt: async (maHd: string, vnp_ResponseCode?: string, resultCode?: string) => {
+    const response = await apiClient.get('/api/ThanhToanTong/get-receipt', {
+      params: { maHd, vnp_ResponseCode, resultCode }
+    });
     return response.data;
   }
 };

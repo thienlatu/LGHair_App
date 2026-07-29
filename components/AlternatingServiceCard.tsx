@@ -71,7 +71,7 @@ export default function AlternatingServiceCard({ service, index, onPressDetail, 
           }
         }}>
           <Text style={[styles.btnOutlineText, isAdded && { color: '#fff' }]} numberOfLines={1} adjustsFontSizeToFit>
-            {onPressAdd ? (isAdded ? "XÓA" : "ADD TO LIST") : "XEM CHI TIẾT"}
+            {onPressAdd ? (isAdded ? "XÓA" : "THÊM") : "XEM CHI TIẾT"}
           </Text>
         </Pressable>
         <Pressable style={styles.btnSolid} onPress={(e) => {

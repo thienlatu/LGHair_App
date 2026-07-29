@@ -104,9 +104,28 @@ export default function BookingHistoryScreen() {
       try {
         setLoading(true);
         const data = await userApi.getBookingHistory(user.maKH);
-        
+        // Lấy thêm chi tiết cho từng đơn để đếm số lượng dịch vụ thực tế vì API history không trả về serviceCount
+        const detailedData = await Promise.all(
+          data.map(async (item: any) => {
+            try {
+              const detailId = item.id || item.maLd || item.maHD || item.orderCode;
+              if (detailId) {
+                const detail = await userApi.getBookingDetail(detailId);
+                return {
+                  ...item,
+                  serviceCount: detail?.items?.length || item.serviceCount,
+                  items: detail?.items || item.items
+                };
+              }
+            } catch (e) {
+              console.log("Không lấy được chi tiết cho đơn", item.id);
+            }
+            return item;
+          })
+        );
+
         // Cố gắng map dữ liệu từ API về dạng BookingHistoryItem để tránh lỗi nếu API trả về field khác
-        const mappedData = data.map((item: any) => ({
+        const mappedData = detailedData.map((item: any) => ({
           id: item.id || item.maLd || item.maHD || item.orderCode || Math.random().toString(),
           status: item.status || (item.trangThai === 0 ? 'cancelled' : item.trangThai === 1 ? 'pending' : item.trangThai === 2 ? 'paid-full' : 'completed'),
           serviceCount: item.serviceCount || (item.items ? item.items.length : 0),
@@ -177,7 +196,7 @@ export default function BookingHistoryScreen() {
       <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.centeredContent}>
           {loading ? (
-             <ActivityIndicator size="large" color={COLORS.black} style={{ marginTop: scale(40) }} />
+            <ActivityIndicator size="large" color={COLORS.black} style={{ marginTop: scale(40) }} />
           ) : filteredBookings.length === 0 ? (
             <View style={styles.emptyState}>
               <Feather name="inbox" size={scale(32)} color={COLORS.muted} />
