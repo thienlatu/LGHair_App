@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -15,10 +15,22 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, isAuthenticated, logout } = useAuthStore();
 
-  const handleLogout = async () => {
-    await logout();
-    // Về trang home hoặc login tùy ý
-    router.replace('/');
+  const handleLogout = () => {
+    Alert.alert(
+      "Xác nhận đăng xuất",
+      "Bạn có chắc chắn muốn đăng xuất khỏi tài khoản?",
+      [
+        { text: "Hủy", style: "cancel" },
+        { 
+          text: "Đăng xuất", 
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+            router.replace('/');
+          }
+        }
+      ]
+    );
   };
 
   return (

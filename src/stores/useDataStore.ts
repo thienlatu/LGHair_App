@@ -54,9 +54,7 @@ export const useDataStore = create<DataState>((set) => ({
   ],
   isLoading: false,
   error: null,
-
-
-
+  
   loadServices: async () => {
     set({ isLoading: true, error: null })
     try {
@@ -67,9 +65,18 @@ export const useDataStore = create<DataState>((set) => ({
       ]);
       const rawCategories = categoryRes.data.$values || categoryRes.data || [];
 
-      const activeCategories = rawCategories.filter((cat: any) => cat.trangThai === 1);
+      const activeCategories = rawCategories.filter((cat: any) => cat.trangThai === 1).map((cat: any) => ({
+        ...cat,
+        maDm: cat.maDm ?? cat.maDM ?? cat.maDMSP ?? cat.id,
+      }));
+      
+      const normalizedServices = (serviceRes.data.services || []).map((srv: any) => ({
+        ...srv,
+        maDv: srv.maDv ?? srv.id,
+      }));
+
       set({
-        SERVICES: serviceRes.data.services,
+        SERVICES: normalizedServices,
         COMBOS: serviceRes.data.combos,
         CATEGORIES: activeCategories,
         PRODUCTS: productRes.data.data,
@@ -78,7 +85,11 @@ export const useDataStore = create<DataState>((set) => ({
       })
 
     } catch (error: any) {
-      set({ error: error.response?.data?.message || 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại.', isLoading: false })
+      let errorMessage = error.response?.data?.message || 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại.';
+      if (error.message === 'Network Error') {
+        errorMessage = 'Không có kết nối mạng. Vui lòng kiểm tra lại đường truyền.';
+      }
+      set({ error: errorMessage, isLoading: false })
     }
   }
 }));

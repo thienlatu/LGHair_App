@@ -11,9 +11,12 @@ import { useAuthStore } from '../../src/stores/useAuthStore';
 import { useScrollStore } from '../../src/stores/useScrollStore';
 import { useCartStore } from '../../src/stores/useCartStore';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 function AnimatedTabBar(props: any) {
   const isTabBarVisible = useScrollStore((state) => state.isTabBarVisible);
   const translateY = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     Animated.timing(translateY, {
@@ -24,7 +27,7 @@ function AnimatedTabBar(props: any) {
   }, [isTabBarVisible]);
 
   return (
-    <Animated.View style={{ transform: [{ translateY }], position: 'absolute', left: 0, right: 0, bottom: 0 }}>
+    <Animated.View style={{ transform: [{ translateY }], position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: Platform.OS === 'android' ? 0 : insets.bottom, backgroundColor: '#fff' }}>
       <BottomTabBar {...props} />
     </Animated.View>
   );
@@ -86,17 +89,17 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="shop"
-          options={{
-            title: 'Shop',
-            tabBarIcon: ({ color }) => <Feather size={18} name="shopping-bag" color={color} />,
-          }}
-        />
-        <Tabs.Screen
           name="booking"
           options={{
             title: 'Đặt lịch',
             tabBarIcon: ({ color }) => <Feather size={18} name="calendar" color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="shop"
+          options={{
+            title: 'Shop',
+            tabBarIcon: ({ color }) => <Feather size={18} name="shopping-bag" color={color} />,
           }}
         />
         <Tabs.Screen

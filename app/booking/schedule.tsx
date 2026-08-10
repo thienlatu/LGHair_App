@@ -17,10 +17,10 @@ import { Feather } from '@expo/vector-icons';
 import PrimaryButton from '../../components/PrimaryButton';
 import ErrorModal from '../../components/ui/ErrorModal';
 import { bookingApi, Stylist } from '../../src/services/bookingApi';
-import { API_BASE_URL } from '../../src/services/apiClient';
 import { useAuthStore } from '../../src/stores/useAuthStore';
 
 import { useCheckoutStore } from '../../src/stores/useCheckoutStore';
+import { getImageUrl } from '../../src/utils/imageUtils';
 
 /**
  * ------------------------------------------------------------------
@@ -57,12 +57,6 @@ const FONT = {
 };
 
 // ---------- Helpers ----------
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return encodeURI(path);
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${encodeURI(safePath)}`;
-};
 
 const getNext7Days = () => {
   const days: Date[] = [];

@@ -69,7 +69,7 @@ export default function RootLayout() {
         <Stack.Screen name="register" />
         <Stack.Screen name="forgot-password" />
       </Stack>
-      <StatusBar style="light" />
+      <StatusBar style="auto" />
     </SafeAreaProvider>
   );
 }

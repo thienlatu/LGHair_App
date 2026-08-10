@@ -9,15 +9,10 @@ import { Theme } from '../../constants/Theme';
 import PrimaryButton from '../../components/PrimaryButton';
 import apiClient, { API_BASE_URL } from '../../src/services/apiClient';
 import { ServiceDetail } from '../../src/types';
+import { getImageUrl } from '../../src/utils/imageUtils';
 
 const { width } = Dimensions.get('window');
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
 
 export default function ServiceDetailScreen() {
   const { id } = useLocalSearchParams();

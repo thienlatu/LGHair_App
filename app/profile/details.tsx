@@ -8,15 +8,11 @@ import { Feather } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { userApi } from '../../src/services/userApi';
 import { ActivityIndicator } from 'react-native';
-import { API_BASE_URL } from '../../src/services/apiClient';
-import { useDataStore } from '../../src/stores/useDataStore';
 
-const getImageUrl = (path?: string) => {
-    if (!path) return '';
-    if (path.startsWith('http')) return path;
-    const safePath = path.startsWith('/') ? path : `/${path}`;
-    return `${API_BASE_URL}${safePath}`;
-};
+import { useDataStore } from '../../src/stores/useDataStore';
+import { getImageUrl } from '../../src/utils/imageUtils';
+
+
 
 /**
  * ------------------------------------------------------------------
@@ -381,7 +377,7 @@ export default function InvoiceDetailScreen() {
                         <Text style={styles.sectionTitle}>CHI TIẾT THANH TOÁN</Text>
 
                         <View style={styles.breakdownBox}>
-                            <BreakdownLine label="Tạm tính dịch vụ" value={formatPrice(invoice.servicesSubtotal)} />                                   
+                            <BreakdownLine label="Tạm tính dịch vụ" value={formatPrice(invoice.servicesSubtotal)} />
                             <BreakdownLine label="Tổng tiền giảm" value={formatPrice(invoice.totalDiscount)} />
 
                             <View style={styles.totalBar}>

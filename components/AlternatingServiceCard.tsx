@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { FontAwesome } from '@expo/vector-icons';
 import { Service } from '../src/types';
-import { API_BASE_URL } from '../src/services/apiClient';
+
+import { getImageUrl } from '../src/utils/imageUtils';
 
 interface Props {
   service: Service;
@@ -15,12 +16,7 @@ interface Props {
   style?: ViewStyle;
 }
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
+
 
 export default function AlternatingServiceCard({ service, index, onPressDetail, onPressBook, onPressAdd, isAdded, style }: Props) {
   const isImageRight = index % 2 !== 0;

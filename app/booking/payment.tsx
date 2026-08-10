@@ -175,6 +175,7 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [voucherLoading, setVoucherLoading] = useState(false);
+  const [processingResult, setProcessingResult] = useState(false);
 
   // States quản lý luồng thanh toán VNPay
   const [paymentUrlToOpen, setPaymentUrlToOpen] = useState<string | null>(null);
@@ -600,10 +601,13 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
         </View>
       </View>
 
-      {loading && (
-        <View style={StyleSheet.absoluteFillObject}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' }}>
+      {(loading || processingResult) && (
+        <View style={[StyleSheet.absoluteFillObject, { zIndex: 9999, elevation: 10 }]}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator size="large" color={COLORS.white} />
+            <Text style={{ color: COLORS.white, marginTop: 12, fontFamily: FONT.labelBold }}>
+              Đang xử lý thanh toán...
+            </Text>
           </View>
         </View>
       )}
@@ -632,6 +636,8 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
                   
                   // 1. Đóng cửa sổ VNPay
                   setPaymentUrlToOpen(null);
+                  // Bật cờ xử lý để hiện UI xoay vòng chờ đợi
+                  setProcessingResult(true);
 
                   // 2. Tách chuỗi Query String
                   const queryString = navState.url.split('?')[1] || '';
@@ -676,6 +682,7 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
                         });
                     } else {
                       router.replace(`/booking/payment-result?${queryString}&maHd=${pendingMaHd}` as any);
+                      // Không setProcessingResult(false) vì đang replace route
                     }
                   } else {
                     router.replace(`/booking/payment-result?${queryString}` as any);

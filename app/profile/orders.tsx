@@ -18,7 +18,8 @@ import { Feather } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/stores/useAuthStore';
 import { useDataStore } from '../../src/stores/useDataStore';
 import { userApi } from '../../src/services/userApi';
-import { API_BASE_URL } from '../../src/services/apiClient';
+
+import { getImageUrl } from '../../src/utils/imageUtils';
 
 /**
  * ------------------------------------------------------------------
@@ -100,14 +101,7 @@ const formatPrice = (price: number) => price.toLocaleString('vi-VN') + 'đ';
 // =====================================================================
 // FIXED: Cập nhật hàm getImageUrl để check string và xử lý lỗi ngầm
 // =====================================================================
-const getImageUrl = (path?: any) => {
-  if (!path || typeof path !== 'string' || path === 'null' || path === 'undefined' || path.trim() === '') {
-    return undefined;
-  }
-  if (path.startsWith('http')) return path;
-  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
-  return `${API_BASE_URL}/${cleanPath}`;
-};
+
 
 // =====================================================================
 // Status badge

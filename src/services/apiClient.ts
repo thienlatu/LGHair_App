@@ -1,9 +1,10 @@
 import axios from 'axios';
 import { tokenService } from './tokenService';
+import { Alert } from 'react-native';
 
 
 // export const API_BASE_URL = ' https://sustained-fading-civil.ngrok-free.dev';
-export const API_BASE_URL = 'https://latuthien2005-001-site1.dtempurl.com';
+export const API_BASE_URL = 'https://luagateam-001-site1.etempurl.com';
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -65,6 +66,13 @@ apiClient.interceptors.response.use(
         // Cập nhật AuthStore để đẩy user văng ra UI ngay lập tức
         const { useAuthStore } = require('../stores/useAuthStore');
         useAuthStore.setState({ user: null, isAuthenticated: false });
+        
+        // Hiển thị thông báo cho người dùng
+        Alert.alert(
+          "Phiên đăng nhập hết hạn",
+          "Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại để tiếp tục sử dụng.",
+          [{ text: "Đăng nhập lại", style: "default" }]
+        );
       }
     }
 

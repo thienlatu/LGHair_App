@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -30,13 +31,8 @@ import SearchModal from '../../components/SearchModal';
 import CartItemRow, { CartLineItem } from '../../components/CartItemRow';
 import ItemCard from '../../components/ItemCard';
 import { calculateShippingFee } from '../../src/utils/shippingCalculator';
+import { getImageUrl } from '../../src/utils/imageUtils';
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
 
 /**
  * ------------------------------------------------------------------
@@ -366,14 +362,27 @@ export default function OrderConfirmationScreen() {
   };
 
   const handleRemoveCartItem = (id: string) => {
-    // Optimistic UI Update
-    setCartItems(prev => prev.filter(item => item.id !== id));
+    Alert.alert(
+      "Xác nhận",
+      "Bạn có chắc muốn xóa sản phẩm này khỏi giỏ hàng?",
+      [
+        { text: "Hủy", style: "cancel" },
+        { 
+          text: "Xóa", 
+          style: "destructive", 
+          onPress: () => {
+            // Optimistic UI Update
+            setCartItems(prev => prev.filter(item => item.id !== id));
 
-    // Background Global Sync
-    const item = cartItems.find(i => i.id === id);
-    if (item) {
-      useCartStore.getState().removeItem(id, item.loai || 'BIENTHE').catch(e => console.log(e));
-    }
+            // Background Global Sync
+            const item = cartItems.find(i => i.id === id);
+            if (item) {
+              useCartStore.getState().removeItem(id, item.loai || 'BIENTHE').catch(e => console.log(e));
+            }
+          }
+        }
+      ]
+    );
   };
 
   const { setCartItems: setStoreCartItems, setSelectedServices: setStoreSelectedServices, setDeliveryMode: setStoreDeliveryMode } = useCheckoutStore();
