@@ -240,6 +240,8 @@ export default function ScheduleScreen() {
       console.log('Error fetching stylists:', error);
       if (error.response) {
         console.log('BE Error Response:', error.response.data);
+      } else {
+        setErrorMsg('Lỗi kết nối mạng, vui lòng kiểm tra lại đường truyền!');
       }
       setStylists([]);
     } finally {

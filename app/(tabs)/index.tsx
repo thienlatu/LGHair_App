@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, Pressable, FlatList, NativeSyntheticEvent, NativeScrollEvent, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Pressable, FlatList, NativeSyntheticEvent, NativeScrollEvent, RefreshControl, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,6 +30,17 @@ export default function HomeScreen() {
   useEffect(() => {
     loadServices();
   }, []);
+
+  // Hỗ trợ hiển thị lỗi khi đang dùng dữ liệu cache cũ
+  useEffect(() => {
+    if (error && CATEGORIES.length > 0) {
+      Alert.alert(
+        "Lỗi đồng bộ",
+        "Không thể làm mới dữ liệu do lỗi kết nối mạng. Ứng dụng đang hiển thị dữ liệu lưu tạm.",
+        [{ text: "Đã hiểu", style: "default" }]
+      );
+    }
+  }, [error]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
@@ -179,7 +190,7 @@ export default function HomeScreen() {
               }}>
                 <View style={styles.categoryImageContainer}>
                   {item.hinhAnh ? (
-                    <Image source={{ uri: getImageUrl(`/uploads/danhmuc/${item.hinhAnh}`) }} style={styles.categoryImage} contentFit="cover" transition={300} />
+                    <Image source={{ uri: getImageUrl(`${item.hinhAnh}`) }} style={styles.categoryImage} contentFit="cover" transition={300} />
                   ) : (
                     <View style={{ width: '100%', height: '100%', backgroundColor: '#d9d9d9' }} />
                   )}

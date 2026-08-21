@@ -1,8 +1,13 @@
 import { create } from 'zustand';
-import apiClient from '../services/apiClient';
+import apiClient, { apiClientCallback } from '../services/apiClient';
 import { tokenService } from '../services/tokenService';
 import axios from 'axios';
 import { useCartStore } from './useCartStore';
+
+// Initialize the callback from apiClient to avoid circular dependencies
+apiClientCallback.onSessionExpired = () => {
+  useAuthStore.getState().logout();
+};
 
 const decodeJwt = (token: string) => {
   try {

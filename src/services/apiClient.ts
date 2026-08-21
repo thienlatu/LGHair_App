@@ -1,17 +1,37 @@
 import axios from 'axios';
 import { tokenService } from './tokenService';
 import { Alert } from 'react-native';
+import { classifyError, ErrorType } from '../network/errorClassifier';
+import { CustomAxiosRequestConfig, shouldRetry, getBackoffDelay, sleep } from '../network/retryPolicy';
 
+export const API_BASE_URL = 'https://lghairapi.online';
 
-// export const API_BASE_URL = ' https://sustained-fading-civil.ngrok-free.dev';
-export const API_BASE_URL = 'https://luagateam-001-site1.etempurl.com';
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
+
+export const apiClientCallback = {
+  onSessionExpired: () => { },
+};
+
+let isRefreshing = false;
+let failedQueue: any[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
 
 // Thêm Access Token vào mỗi Request
 apiClient.interceptors.request.use(
@@ -37,7 +57,19 @@ apiClient.interceptors.response.use(
 
     // Nếu lỗi 401 và chưa từng thử refresh token
     if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise(function (resolve, reject) {
+          failedQueue.push({ resolve, reject });
+        }).then(token => {
+          originalRequest.headers.Authorization = 'Bearer ' + token;
+          return apiClient(originalRequest);
+        }).catch(err => {
+          return Promise.reject(err);
+        });
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
 
       try {
         const refreshToken = await tokenService.getRefreshToken();
@@ -50,33 +82,51 @@ apiClient.interceptors.response.use(
         });
 
         if (refreshResponse.data && refreshResponse.data.success) {
-          // Lấy token mới từ BE (bạn cần sửa BE để trả về token mới trong body)
           const newAccessToken = refreshResponse.data.token || refreshResponse.data.accessToken;
           const newRefreshToken = refreshResponse.data.refreshToken;
 
           if (newAccessToken) {
             await tokenService.setTokens(newAccessToken, newRefreshToken || refreshToken || '');
             originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+            processQueue(null, newAccessToken);
             return apiClient(originalRequest);
           }
         }
+
+        throw new Error('No access token returned');
       } catch (refreshError) {
-        // Refresh token cũng hết hạn -> Yêu cầu đăng nhập lại
+        processQueue(refreshError, null);
         await tokenService.clearTokens();
-        // Cập nhật AuthStore để đẩy user văng ra UI ngay lập tức
-        const { useAuthStore } = require('../stores/useAuthStore');
-        useAuthStore.setState({ user: null, isAuthenticated: false });
-        
-        // Hiển thị thông báo cho người dùng
+
+        // Gọi callback thay vì require trực tiếp để tránh circular dependency
+        apiClientCallback.onSessionExpired();
+
         Alert.alert(
           "Phiên đăng nhập hết hạn",
           "Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại để tiếp tục sử dụng.",
           [{ text: "Đăng nhập lại", style: "default" }]
         );
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 
-    return Promise.reject(error);
+    // Nếu gặp lỗi khác (ví dụ: Timeout, Network Failure), xét xem có nên Retry (chỉ cho GET) không
+    const config = error.config as CustomAxiosRequestConfig;
+    if (config && (await shouldRetry(error, config))) {
+      config.retryCount = (config.retryCount || 0) + 1;
+      const delay = getBackoffDelay(config.retryCount);
+      
+      console.log(`[API Retry] Attempt ${config.retryCount} for ${config.url} in ${delay}ms...`);
+      await sleep(delay);
+      
+      return apiClient(config);
+    }
+
+    // Nếu không phải 401 hoặc refresh thất bại, hoặc không được retry, classify lỗi chuẩn hóa
+    const classifiedError = await classifyError(error);
+    return Promise.reject(classifiedError);
   }
 );
 

@@ -9,13 +9,16 @@ interface DataState {
   CATEGORIES: Category[];
   isLoading: boolean;
   error: string | null;
-  loadServices: () => Promise<void>;
+  currentRequestId: number;
+  loadServices: (signal?: AbortSignal) => Promise<void>;
 }
 
+let requestCounter = 0;
 
 
 
-export const useDataStore = create<DataState>((set) => ({
+
+export const useDataStore = create<DataState>((set, get) => ({
   PRODUCTS: [],
   COMBOS: [],
   SERVICES: [
@@ -54,15 +57,26 @@ export const useDataStore = create<DataState>((set) => ({
   ],
   isLoading: false,
   error: null,
+  currentRequestId: 0,
   
-  loadServices: async () => {
-    set({ isLoading: true, error: null })
+  loadServices: async (signal?: AbortSignal) => {
+    requestCounter++;
+    const thisRequestId = requestCounter;
+
+    set({ isLoading: true, error: null, currentRequestId: thisRequestId })
     try {
       const [serviceRes, productRes, categoryRes] = await Promise.all([
-        apiClient.get('/api/DanhSachDichVu'),
-        apiClient.get('/api/ThanhToanTong/get-products'),
-        apiClient.get('/api/danhmuc')
+        apiClient.get('/api/DanhSachDichVu', { signal }),
+        apiClient.get('/api/ThanhToanTong/get-products', { signal }),
+        apiClient.get('/api/danhmuc', { signal })
       ]);
+
+      // Stale-response guard
+      if (get().currentRequestId !== thisRequestId) {
+        console.log(`[Stale Guard] Discarding response for request ${thisRequestId}`);
+        return;
+      }
+
       const rawCategories = categoryRes.data.$values || categoryRes.data || [];
 
       const activeCategories = rawCategories.filter((cat: any) => cat.trangThai === 1).map((cat: any) => ({
@@ -85,8 +99,11 @@ export const useDataStore = create<DataState>((set) => ({
       })
 
     } catch (error: any) {
+      if (get().currentRequestId !== thisRequestId) return;
+      if (error.name === 'CanceledError' || error.message === 'canceled') return;
+
       let errorMessage = error.response?.data?.message || 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại.';
-      if (error.message === 'Network Error') {
+      if (error.message === 'Network Error' || error.type === 'NETWORK_FAILURE' || error.type === 'OFFLINE_BEFORE_SEND') {
         errorMessage = 'Không có kết nối mạng. Vui lòng kiểm tra lại đường truyền.';
       }
       set({ error: errorMessage, isLoading: false })
