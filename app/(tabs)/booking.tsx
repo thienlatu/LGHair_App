@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -23,6 +24,7 @@ import { useAuthStore } from '../../src/stores/useAuthStore';
 import { useDataStore } from '../../src/stores/useDataStore';
 import { useCheckoutStore } from '../../src/stores/useCheckoutStore';
 import { useCartStore } from '../../src/stores/useCartStore';
+import { useDebounce } from '../../src/hooks/useDebounce';
 import { bookingApi, BookingServiceItem } from '../../src/services/bookingApi';
 import apiClient, { API_BASE_URL } from '../../src/services/apiClient';
 import { ProductListItem } from '../../src/types';
@@ -30,13 +32,8 @@ import SearchModal from '../../components/SearchModal';
 import CartItemRow, { CartLineItem } from '../../components/CartItemRow';
 import ItemCard from '../../components/ItemCard';
 import { calculateShippingFee } from '../../src/utils/shippingCalculator';
+import { getImageUrl } from '../../src/utils/imageUtils';
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
 
 /**
  * ------------------------------------------------------------------
@@ -206,6 +203,7 @@ export default function OrderConfirmationScreen() {
   // ---------- Search Modal States ----------
   const [searchMode, setSearchMode] = useState<SearchMode>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   // ---------- Fetch Data on Mount ----------
   useEffect(() => {
@@ -274,8 +272,7 @@ export default function OrderConfirmationScreen() {
     } catch (e: any) {
       setErrorMsg('Lỗi nạp dữ liệu. Vui lòng thử lại sau.');
     } finally {
-      // Giả lập chút delay nhỏ để React render mượt, loading < 0.2s
-      setTimeout(() => setLoading(false), 200);
+      setLoading(false);
     }
   };
 
@@ -325,6 +322,9 @@ export default function OrderConfirmationScreen() {
     const productName = product.tenBienThe ? `${product.tenSp} - ${product.tenBienThe}` : product.tenSp;
     const productPrice = product.giaBan || product.giaTu || 0;
 
+    // Lưu state cũ để rollback
+    const previousCartItems = [...cartItems];
+
     // Optimistic UI Update
     setCartItems(prev => {
       const exists = prev.find(item => item.id === productId);
@@ -342,12 +342,17 @@ export default function OrderConfirmationScreen() {
     });
 
     // Background Global Sync
-    useCartStore.getState().addVariant(productId, 1).catch(() => {
-      setErrorMsg("Không thể thêm sản phẩm vào giỏ hàng");
+    useCartStore.getState().addVariant(productId, 1).catch((e) => {
+      // Rollback
+      setCartItems(previousCartItems);
+      const serverMsg = e.response?.data?.message || e.message;
+      setErrorMsg(`Lỗi: ${serverMsg}`);
     });
   };
 
   const handleUpdateCartQuantity = (id: string, delta: number) => {
+    const previousCartItems = [...cartItems];
+
     // Optimistic UI Update
     setCartItems(prev =>
       prev.map(item =>
@@ -361,19 +366,42 @@ export default function OrderConfirmationScreen() {
     const item = cartItems.find(i => i.id === id);
     if (item) {
       const newQty = Math.max(1, item.quantity + delta);
-      useCartStore.getState().updateQuantity(id, item.loai || 'BIENTHE', newQty).catch(e => console.log(e));
+      useCartStore.getState().updateQuantity(id, item.loai || 'BIENTHE', newQty).catch(e => {
+        setCartItems(previousCartItems);
+        const serverMsg = e.response?.data?.message || e.message;
+        setErrorMsg(`Lỗi: ${serverMsg}`);
+      });
     }
   };
 
   const handleRemoveCartItem = (id: string) => {
-    // Optimistic UI Update
-    setCartItems(prev => prev.filter(item => item.id !== id));
+    Alert.alert(
+      "Xác nhận",
+      "Bạn có chắc muốn xóa sản phẩm này khỏi giỏ hàng?",
+      [
+        { text: "Hủy", style: "cancel" },
+        { 
+          text: "Xóa", 
+          style: "destructive", 
+          onPress: () => {
+            const previousCartItems = [...cartItems];
+            
+            // Optimistic UI Update
+            setCartItems(prev => prev.filter(item => item.id !== id));
 
-    // Background Global Sync
-    const item = cartItems.find(i => i.id === id);
-    if (item) {
-      useCartStore.getState().removeItem(id, item.loai || 'BIENTHE').catch(e => console.log(e));
-    }
+            // Background Global Sync
+            const item = cartItems.find(i => i.id === id);
+            if (item) {
+              useCartStore.getState().removeItem(id, item.loai || 'BIENTHE').catch(e => {
+                setCartItems(previousCartItems);
+                const serverMsg = e.response?.data?.message || e.message;
+                setErrorMsg(`Lỗi: ${serverMsg}`);
+              });
+            }
+          }
+        }
+      ]
+    );
   };
 
   const { setCartItems: setStoreCartItems, setSelectedServices: setStoreSelectedServices, setDeliveryMode: setStoreDeliveryMode } = useCheckoutStore();
@@ -404,7 +432,7 @@ export default function OrderConfirmationScreen() {
 
   // ---------- Search Modal Handlers ----------
   const filteredSearchResults = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearchQuery.toLowerCase();
 
     if (searchMode === 'service') {
       const all = [...servicesData, ...combosData];
@@ -416,7 +444,7 @@ export default function OrderConfirmationScreen() {
       return allProducts.filter(p => p.tenSp?.toLowerCase()?.includes(query));
     }
     return [];
-  }, [searchQuery, searchMode, servicesData, combosData, allProducts, selectedServiceIds]);
+  }, [debouncedSearchQuery, searchMode, servicesData, combosData, allProducts, selectedServiceIds]);
 
   const onSelectSearchResult = (item: any) => {
     if (searchMode === 'service') {

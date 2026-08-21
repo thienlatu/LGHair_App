@@ -6,7 +6,7 @@ import { Service } from '../src/types';
 import { Colors } from '../constants/Colors';
 import { Theme } from '../constants/Theme';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
-import { API_BASE_URL } from '../src/services/apiClient';
+import { getImageUrl } from '../src/utils/imageUtils';
 
 interface ServiceCardProps {
   service: Service;
@@ -16,12 +16,6 @@ interface ServiceCardProps {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
 
 export default function ServiceCard({ service, onPress, style }: ServiceCardProps) {
   const scale = useSharedValue(1);

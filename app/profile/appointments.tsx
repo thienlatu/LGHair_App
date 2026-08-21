@@ -66,8 +66,40 @@ function StatusBadge({ status }: { status: BookingStatus }) {
   );
 }
 
+const detailCache: Record<string, any> = {};
+
 function BookingCard({ booking }: { booking: BookingHistoryItem }) {
   const router = useRouter();
+  const [detailData, setDetailData] = useState<any>(detailCache[booking.id] || null);
+  const [isLoading, setIsLoading] = useState(!detailCache[booking.id]);
+
+  useEffect(() => {
+    if (detailCache[booking.id]) return;
+    let isMounted = true;
+    
+    const fetchDetail = async () => {
+      try {
+        const res = await userApi.getBookingDetail(booking.id);
+        if (isMounted) {
+          detailCache[booking.id] = res;
+          setDetailData(res);
+        }
+      } catch (e) {
+        console.log("Error fetching detail for", booking.id);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    
+    fetchDetail();
+    return () => { isMounted = false; };
+  }, [booking.id]);
+
+  const serviceCount = detailData ? (detailData.items?.length || 1) : booking.serviceCount;
+  const serviceName = detailData ? (detailData.items?.[0]?.name || booking.service) : booking.service;
+  const totalAmount = detailData ? (detailData.finalAmount || booking.amount) : booking.amount;
+  const orderDate = detailData ? `${detailData.ngayHen ? detailData.ngayHen.split('T')[0] : ''} ${detailData.gioHen || ''}`.trim() : booking.date;
+
   return (
     <Pressable style={styles.card} onPress={() => router.push(`/profile/details?id=${booking.id}` as any)}>
       <View style={styles.cardTopRow}>
@@ -78,12 +110,12 @@ function BookingCard({ booking }: { booking: BookingHistoryItem }) {
       </View>
       <View style={styles.cardDivider} />
       <View style={styles.cardInfoRows}>
-        <Text style={styles.infoLine}>Tổng dịch vụ : x{booking.serviceCount}</Text>
-        <Text style={styles.infoLine} numberOfLines={1}>Dịch vụ : {booking.service}</Text>
+        <Text style={styles.infoLine}>Tổng dịch vụ : {isLoading ? 'Đang tải...' : `x${serviceCount}`}</Text>
+        <Text style={styles.infoLine} numberOfLines={1}>Dịch vụ : {isLoading ? 'Đang tải...' : serviceName}</Text>
         <Text style={styles.infoLine}>
-          Tổng số tiền dịch vụ:    {formatPrice(booking.amount)}
+          Tổng số tiền dịch vụ:    {isLoading ? 'Đang tải...' : formatPrice(totalAmount)}
         </Text>
-        <Text style={styles.infoLine}>Ngày đặt: {booking.date}</Text>
+        <Text style={styles.infoLine}>Ngày đặt: {isLoading ? 'Đang tải...' : orderDate}</Text>
       </View>
     </Pressable>
   );
@@ -104,36 +136,23 @@ export default function BookingHistoryScreen() {
       try {
         setLoading(true);
         const data = await userApi.getBookingHistory(user.maKH);
-        // Lấy thêm chi tiết cho từng đơn để đếm số lượng dịch vụ thực tế vì API history không trả về serviceCount
-        const detailedData = await Promise.all(
-          data.map(async (item: any) => {
-            try {
-              const detailId = item.id || item.maLd || item.maHD || item.orderCode;
-              if (detailId) {
-                const detail = await userApi.getBookingDetail(detailId);
-                return {
-                  ...item,
-                  serviceCount: detail?.items?.length || item.serviceCount,
-                  items: detail?.items || item.items
-                };
-              }
-            } catch (e) {
-              console.log("Không lấy được chi tiết cho đơn", item.id);
-            }
-            return item;
-          })
+
+        const rawData = data.$values || data || [];
+        
+        // Filter out items without a valid ID to prevent Math.random() fallback and failed API calls
+        const validItems = rawData.filter((item: any) => 
+          item && (item.id || item.maLd || item.maHD || item.orderCode || item.maHoaDon || item.maLichDat)
         );
 
-        // Cố gắng map dữ liệu từ API về dạng BookingHistoryItem để tránh lỗi nếu API trả về field khác
-        const mappedData = detailedData.map((item: any) => ({
-          id: item.id || item.maLd || item.maHD || item.orderCode || Math.random().toString(),
+        const mappedData = validItems.map((item: any) => ({
+          id: item.id || item.maLd || item.maHD || item.orderCode || item.maHoaDon || item.maLichDat,
           status: item.status || (item.trangThai === 0 ? 'cancelled' : item.trangThai === 1 ? 'pending' : item.trangThai === 2 ? 'paid-full' : 'completed'),
-          serviceCount: item.serviceCount || (item.items ? item.items.length : 0),
-          service: item.service || (item.items && item.items.length > 0 ? item.items[0].name : 'Dịch vụ'),
+          serviceCount: item.serviceCount || (item.items ? item.items.length : 1),
+          service: item.service || (item.items && item.items.length > 0 ? item.items[0].name : 'Xem chi tiết'),
           amount: item.amount || item.finalAmount || item.tongTien || 0,
           date: item.date || item.orderDate || `${item.ngayHen ? item.ngayHen.split('T')[0] : ''} ${item.gioHen || ''}`.trim() || item.ngayTao || '',
         }));
-        setBookings(mappedData.length > 0 ? mappedData : data);
+        setBookings(mappedData);
       } catch (err) {
         console.error("Lỗi lấy lịch sử lịch hẹn", err);
       } finally {

@@ -27,33 +27,44 @@ useEffect(() => {
         setStatus('success');
         useCartStore.getState().clearCart();
         useCartStore.getState().resetCart();
-      } else if (responseCode) {
-        if (responseCode === '00') {
-          setStatus('success');
-          useCartStore.getState().clearCart();
-          useCartStore.getState().resetCart();
-        } else {
-          setStatus('failed');
-          setErrorMessage(`Giao dịch thất bại (Mã lỗi: ${responseCode})`);
-          return; // Thất bại thì dừng luôn, không gọi API cập nhật thành công nữa
-        }
-      } else {
+        return;
+      }
+
+      if (!responseCode) {
         setStatus('failed');
         setErrorMessage('Không nhận được kết quả thanh toán hợp lệ.');
         return;
       }
 
+      if (responseCode !== '00') {
+        setStatus('failed');
+        setErrorMessage(`Giao dịch thất bại (Mã lỗi: ${responseCode})`);
+        return;
+      }
+
+      // Đến đây là VNPay báo thành công, tiến hành gọi API đồng bộ xuống Backend
       if (maHd) {
         try {
           if (maHd.startsWith('SP')) {
             await bookingApi.confirmProductPayment(maHd, responseCode);
           } 
-          else if (maHd.startsWith('TH')) {
+          else if (maHd.startsWith('TH') || maHd.startsWith('LD')) {
             await bookingApi.getReceipt(maHd, responseCode);
           }
+          
+          // API thành công mới hiển thị giao diện Thành công và xóa giỏ hàng
+          setStatus('success');
+          useCartStore.getState().clearCart();
+          useCartStore.getState().resetCart();
         } catch (error) {
           console.log("Lỗi khi xác nhận đơn với Backend:", error);
+          setStatus('failed');
+          setErrorMessage('Giao dịch VNPay thành công nhưng không thể đồng bộ với hệ thống. Vui lòng liên hệ Hotline kèm mã giao dịch để được hỗ trợ.');
         }
+      } else {
+        // Trường hợp lạ: Thành công nhưng mất mã HD
+        setStatus('failed');
+        setErrorMessage('Đã thanh toán nhưng mất mã đối soát. Vui lòng liên hệ hỗ trợ.');
       }
     };
 

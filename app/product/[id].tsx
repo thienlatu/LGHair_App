@@ -13,15 +13,12 @@ import { useAuthStore } from '../../src/stores/useAuthStore';
 import { useCartStore } from '../../src/stores/useCartStore';
 import { Alert } from 'react-native';
 import AppToast from '../../components/ui/AppToast';
+import ErrorState from '../../components/ui/ErrorState';
+import { getImageUrl } from '../../src/utils/imageUtils';
+import { useDataStore } from '../../src/stores/useDataStore';
 
 const { width } = Dimensions.get('window');
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -30,6 +27,7 @@ export default function ProductDetailScreen() {
 
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedBienThe, setSelectedBienThe] = useState<BienTheSanPham | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'ingredients' | 'usage'>('details');
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
@@ -46,21 +44,44 @@ export default function ProductDetailScreen() {
     setTimeout(() => setToastVisible(false), 3000);
   };
 
-  useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        const normalizedId = Array.isArray(id) ? id[0] : id;
-        const response = await apiClient.get(`/api/SanPham/${normalizedId}`);
-        setProduct(response.data);
-        if (response.data.bienThes && response.data.bienThes.length > 0) {
+  const fetchProduct = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const normalizedId = Array.isArray(id) ? id[0] : id;
+      let targetMaSp = normalizedId;
+      
+      const { PRODUCTS } = useDataStore.getState();
+      if (PRODUCTS && PRODUCTS.length > 0) {
+        const foundProduct = PRODUCTS.find(p => p.maBienThe === normalizedId || p.maSp === normalizedId);
+        if (foundProduct && foundProduct.maSp) {
+          targetMaSp = foundProduct.maSp;
+        }
+      }
+
+      const response = await apiClient.get(`/api/SanPham/${targetMaSp}`);
+      setProduct(response.data);
+      if (response.data.bienThes && response.data.bienThes.length > 0) {
+        const targetBienThe = response.data.bienThes.find((bt: any) => bt.maBienThe === normalizedId);
+        if (targetBienThe) {
+          setSelectedBienThe(targetBienThe);
+        } else {
           setSelectedBienThe(response.data.bienThes[0]);
         }
-      } catch (error) {
-        console.error('Error fetching product detail:', error);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error: any) {
+      console.error('Error fetching product detail:', error);
+      if (error.message === 'Network Error') {
+        setError('Không có kết nối mạng. Vui lòng kiểm tra lại đường truyền.');
+      } else {
+        setError(error.response?.data?.message || 'Không thể tải dữ liệu sản phẩm. Vui lòng thử lại.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchProduct();
   }, [id]);
 
@@ -68,6 +89,15 @@ export default function ProductDetailScreen() {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={Colors.light.text} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <ErrorState message={error} onRetry={fetchProduct} />
+        <PrimaryButton title="Quay Lại" onPress={() => router.back()} style={{ marginHorizontal: 20, marginBottom: 20 }} />
       </View>
     );
   }
@@ -162,7 +192,7 @@ export default function ProductDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         <View style={styles.imageContainer}>
           <Image
-            source={getImageUrl(product.hinhAnhDaiDien)}
+            source={getImageUrl(selectedBienThe?.hinhAnhDaiDien || product.hinhAnhDaiDien)}
             style={styles.image}
             contentFit="cover"
             transition={500}

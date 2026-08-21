@@ -9,14 +9,8 @@ import { useAuthStore } from '../../src/stores/useAuthStore';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
-import { API_BASE_URL } from '../../src/services/apiClient';
+import { getImageUrl } from '../../src/utils/imageUtils';
 
-const getImageUrl = (path?: string) => {
-  if (!path || path === 'null' || path === 'undefined' || path.trim() === '') return undefined;
-  if (path.startsWith('http')) return path;
-  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
-  return `${API_BASE_URL}/${cleanPath}`;
-};
 
 export default function CartScreen() {
   const insets = useSafeAreaInsets();

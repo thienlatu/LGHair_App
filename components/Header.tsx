@@ -20,17 +20,18 @@ export default function Header() {
       )}
 
       <View style={styles.content}>
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <TextInput
-            placeholder="Tìm kiếm..."
-            placeholderTextColor={Colors.light.text}
-            style={styles.searchInput}
-          />
-          <TouchableOpacity style={styles.searchButton}>
+        {/* Search Bar (now a button routing to /search) */}
+        <Pressable 
+          style={styles.searchContainer}
+          onPress={() => router.push('/search')}
+        >
+          <Text style={[styles.searchInput, { color: Colors.light.text, opacity: 0.6 }]}>
+            Tìm kiếm...
+          </Text>
+          <View style={styles.searchButton}>
             <Feather name="search" size={16} color="white" />
-          </TouchableOpacity>
-        </View>
+          </View>
+        </Pressable>
 
         {/* Right Icons */}
         <View style={styles.rightIcons}>

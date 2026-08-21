@@ -174,7 +174,9 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
 
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [voucherLoading, setVoucherLoading] = useState(false);
+  const [processingResult, setProcessingResult] = useState(false);
 
   // States quản lý luồng thanh toán VNPay
   const [paymentUrlToOpen, setPaymentUrlToOpen] = useState<string | null>(null);
@@ -305,8 +307,10 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
       setErrorMsg('Vui lòng nhập đầy đủ họ tên, số điện thoại, và email.');
       return;
     }
+    if (loading || isSubmitting) return;
 
     try {
+      setIsSubmitting(true);
       setLoading(true);
 
       const checkoutType = (hasService() && hasProduct())
@@ -316,29 +320,29 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
       // PAYLOAD CHUẨN VIẾT HOA THEO ĐÚNG CHECKOUT_SUMMARY_REQUEST CỦA BACKEND
       const payload: any = {
         CheckoutType: checkoutType,
-        MaKh: user?.maKH || '', 
+        MaKh: user?.maKH || '',
         CustomerName: fullName,
         Phone: phone,
         Email: email,
         Note: note,
         BookingDate: bookingDate && bookingTime ? new Date(`${bookingDate}T${bookingTime}:00`).toISOString() : undefined,
         StylistId: stylistId || undefined,
-        Services: selectedServices.map(s => ({ 
-            Id: s.id, 
-            Price: s.price, 
-            Duration: s.duration || 30 
+        Services: selectedServices.map(s => ({
+          Id: s.id,
+          Price: s.price,
+          Duration: s.duration || 30
         })),
-        Products: cartItems.map(p => ({ 
-            Id: p.id, 
-            Gia: p.price, 
-            SoLuong: p.quantity 
+        Products: cartItems.map(p => ({
+          Id: p.id,
+          Gia: p.price,
+          SoLuong: p.quantity
         })),
         ReceiveType: isDelivery() ? "home" : "store",
-        DeliveryInfo: isDelivery() ? { 
-            HoTen: fullName, 
-            SoDienThoai: phone, 
-            DiaChi: deliveryAddress, 
-            Email: email 
+        DeliveryInfo: isDelivery() ? {
+          HoTen: fullName,
+          SoDienThoai: phone,
+          DiaChi: deliveryAddress,
+          Email: email
         } : undefined,
         VoucherIds: voucherCode ? [voucherCode] : [],
         GrandTotal: netTotal,
@@ -396,6 +400,7 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
       setErrorMsg(serverMsg ? `Lỗi Backend: ${serverMsg}` : 'Thanh toán thất bại.');
     } finally {
       setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -595,15 +600,18 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
               <Text style={styles.footerLabel}>THANH TOÁN NGAY</Text>
               <Text style={styles.footerAmount}>{formatPrice(dueNow)}</Text>
             </View>
-            <PrimaryButton title="THANH TOÁN NGAY" onPress={handlePayNow} style={styles.footerBtn} disabled={loading} />
+            <PrimaryButton title="THANH TOÁN NGAY" onPress={handlePayNow} style={styles.footerBtn} disabled={loading || isSubmitting || processingResult} />
           </View>
         </View>
       </View>
 
-      {loading && (
-        <View style={StyleSheet.absoluteFillObject}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' }}>
+      {(loading || isSubmitting || processingResult) && (
+        <View style={[StyleSheet.absoluteFillObject, { zIndex: 9999, elevation: 10 }]}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator size="large" color={COLORS.white} />
+            <Text style={{ color: COLORS.white, marginTop: 12, fontFamily: FONT.labelBold }}>
+              Đang xử lý thanh toán...
+            </Text>
           </View>
         </View>
       )}
@@ -628,10 +636,12 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
               style={{ flex: 1 }}
               onNavigationStateChange={(navState) => {
                 // Kiểm tra URL trả về từ VNPay
-                if (navState.url.includes('localhost:5173') || navState.url.includes('vnp_ResponseCode')) {
-                  
+                if (navState.url.includes('vnp_ResponseCode=') || navState.url.includes('vnp_TransactionStatus=')) {
+
                   // 1. Đóng cửa sổ VNPay
                   setPaymentUrlToOpen(null);
+                  // Bật cờ xử lý để hiện UI xoay vòng chờ đợi
+                  setProcessingResult(true);
 
                   // 2. Tách chuỗi Query String
                   const queryString = navState.url.split('?')[1] || '';
@@ -676,6 +686,7 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
                         });
                     } else {
                       router.replace(`/booking/payment-result?${queryString}&maHd=${pendingMaHd}` as any);
+                      // Không setProcessingResult(false) vì đang replace route
                     }
                   } else {
                     router.replace(`/booking/payment-result?${queryString}` as any);

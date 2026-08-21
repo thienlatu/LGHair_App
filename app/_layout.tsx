@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import { useAuthStore } from '../src/stores/useAuthStore';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import GlobalOfflineBanner from '../components/ui/GlobalOfflineBanner';
+import { useAppLifecycle } from '../src/network/useAppLifecycle';
 
 import { useFonts } from 'expo-font';
 import { Inter_300Light } from '@expo-google-fonts/inter/300Light';
@@ -32,6 +34,9 @@ export default function RootLayout() {
 
   const checkAuth = useAuthStore(state => state.checkAuth);
   const [isAuthChecked, setIsAuthChecked] = useState(false);
+
+  // Kích hoạt App Lifecycle (Foreground Revalidation & Network Recovery)
+  useAppLifecycle();
 
   useEffect(() => {
     try {
@@ -61,6 +66,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <GlobalOfflineBanner />
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="product/[id]" />
@@ -69,7 +75,7 @@ export default function RootLayout() {
         <Stack.Screen name="register" />
         <Stack.Screen name="forgot-password" />
       </Stack>
-      <StatusBar style="light" />
+      <StatusBar style="auto" />
     </SafeAreaProvider>
   );
 }

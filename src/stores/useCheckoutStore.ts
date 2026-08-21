@@ -62,6 +62,7 @@ export const useCheckoutStore = create<CheckoutState>((set) => ({
     deliveryMode: 'pickup',
     bookingDate: '',
     bookingTime: '',
-    stylistId: ''
+    stylistId: '',
+    selectedServiceIds: []
   })
 }));

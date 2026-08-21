@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
-import { API_BASE_URL } from '../src/services/apiClient';
+import { getImageUrl } from '../src/utils/imageUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BASE_WIDTH = 390;
@@ -24,12 +24,6 @@ const FONT = {
 
 const formatPrice = (price: number) => price.toLocaleString('vi-VN') + 'đ';
 
-const getImageUrl = (path?: string) => {
-  if (!path || path === 'null' || path === 'undefined' || path.trim() === '') return undefined;
-  if (path.startsWith('http')) return path;
-  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
-  return `${API_BASE_URL}/${cleanPath}`;
-};
 
 interface ItemCardProps {
   image?: string;

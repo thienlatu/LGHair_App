@@ -78,6 +78,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       set({ cart: data, items: data.items, totalItems, totalPrice, error: null });
     } catch (err: any) {
       set({ ...previousState, error: err.response?.data?.message || err.message });
+      throw err;
     }
   },
 
@@ -97,6 +98,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       set({ cart: data, items: data.items, totalItems, totalPrice, error: null });
     } catch (err: any) {
       set({ ...previousState, error: err.response?.data?.message || err.message });
+      throw err;
     }
   },
 

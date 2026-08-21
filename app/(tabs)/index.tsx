@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, Pressable, FlatList, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Pressable, FlatList, NativeSyntheticEvent, NativeScrollEvent, RefreshControl, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,28 +12,35 @@ import { Theme } from '../../constants/Theme';
 import PrimaryButton from '../../components/PrimaryButton';
 import AlternatingServiceCard from '../../components/AlternatingServiceCard';
 import ProductCard from '../../components/ProductCard';
-import ErrorModal from '../../components/ui/ErrorModal';
-import { API_BASE_URL } from '../../src/services/apiClient';
+import { StatusBar } from 'expo-status-bar';
+import LoadingState from '../../components/ui/LoadingState';
+import ErrorState from '../../components/ui/ErrorState';
+import { getImageUrl } from '../../src/utils/imageUtils';
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
 
 const { height } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { PRODUCTS, SERVICES, CATEGORIES, loadServices, error } = useDataStore();
+  const { PRODUCTS, SERVICES, CATEGORIES, loadServices, error, isLoading } = useDataStore();
   const setTabBarVisible = useScrollStore((state) => state.setTabBarVisible);
   const scrollOffset = useRef(0);
 
   useEffect(() => {
     loadServices();
   }, []);
+
+  // Hỗ trợ hiển thị lỗi khi đang dùng dữ liệu cache cũ
+  useEffect(() => {
+    if (error && CATEGORIES.length > 0) {
+      Alert.alert(
+        "Lỗi đồng bộ",
+        "Không thể làm mới dữ liệu do lỗi kết nối mạng. Ứng dụng đang hiển thị dữ liệu lưu tạm.",
+        [{ text: "Đã hiểu", style: "default" }]
+      );
+    }
+  }, [error]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
@@ -77,13 +84,25 @@ export default function HomeScreen() {
     }
   };
 
+  if (isLoading && CATEGORIES.length === 0) {
+    return <LoadingState message="Đang tải dữ liệu trang chủ..." />;
+  }
+
+  if (error && CATEGORIES.length === 0) {
+    return <ErrorState message={error} onRetry={loadServices} />;
+  }
+
   return (
     <>
+      <StatusBar style="dark" />
       <ScrollView
         style={styles.container}
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={loadServices} tintColor={Colors.light.tint} />
+        }
         contentContainerStyle={{
           paddingTop: insets.top + 60, // Account for header height
           paddingBottom: 100
@@ -163,15 +182,15 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 22 }}
             ItemSeparatorComponent={() => <View style={{ width: 18 }} />}
-            keyExtractor={(item, index) => item.maDm?.toString() || (item as any).maDM?.toString() || (item as any).maDMSP?.toString() || (item as any).id?.toString() || index.toString()}
+            keyExtractor={(item, index) => item.maDm?.toString() || index.toString()}
             renderItem={({ item }) => (
               <Pressable style={styles.categoryItem} onPress={() => {
-                const catId = item.maDm || (item as any).maDM || (item as any).maDMSP || (item as any).id;
+                const catId = item.maDm;
                 router.navigate({ pathname: '/(tabs)/services', params: { category: catId } });
               }}>
                 <View style={styles.categoryImageContainer}>
                   {item.hinhAnh ? (
-                    <Image source={{ uri: getImageUrl(item.hinhAnh) }} style={styles.categoryImage} contentFit="cover" transition={300} />
+                    <Image source={{ uri: getImageUrl(`${item.hinhAnh}`) }} style={styles.categoryImage} contentFit="cover" transition={300} />
                   ) : (
                     <View style={{ width: '100%', height: '100%', backgroundColor: '#d9d9d9' }} />
                   )}
@@ -199,7 +218,7 @@ export default function HomeScreen() {
 
           <View style={styles.serviceList}>
             {SERVICES.slice(0, 2).map((service, index) => (
-              <Animated.View key={service.maDv || (service as any).id || index.toString()} entering={FadeInDown.delay(300 + index * 200).duration(800)}>
+              <Animated.View key={service.maDv} entering={FadeInDown.delay(300 + index * 200).duration(800)}>
                 <AlternatingServiceCard
                   service={service}
                   index={index}
@@ -257,12 +276,6 @@ export default function HomeScreen() {
         </View>
 
       </ScrollView>
-      <ErrorModal
-        visible={!!error}
-        title="LỖI KẾT NỐI"
-        message={error || 'Đã xảy ra lỗi không xác định'}
-        onClose={() => useDataStore.setState({ error: null })}
-      />
     </>
   );
 }

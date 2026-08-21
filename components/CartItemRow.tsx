@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
-import { API_BASE_URL } from '../src/services/apiClient';
 import { useRouter } from 'expo-router';
+import { getImageUrl } from '../src/utils/imageUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BASE_WIDTH = 390;
@@ -27,12 +27,6 @@ const FONT = {
 
 const formatPrice = (price: number) => price.toLocaleString('vi-VN') + 'đ';
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
 
 export interface CartLineItem {
   id: string;

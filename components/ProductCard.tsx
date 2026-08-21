@@ -4,19 +4,13 @@ import { Image } from 'expo-image';
 import { ProductListItem } from '../src/types';
 import { Colors } from '../constants/Colors';
 import { Theme } from '../constants/Theme';
-import { API_BASE_URL } from '../src/services/apiClient';
 import { Feather } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { getImageUrl } from '../src/utils/imageUtils';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - Theme.spacing.xl * 2 - Theme.spacing.md) / 2;
 
-const getImageUrl = (path?: string) => {
-  if (!path) return '';
-  if (path.startsWith('http')) return path;
-  const safePath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${safePath}`;
-};
 
 interface ProductCardProps {
   product: ProductListItem;
