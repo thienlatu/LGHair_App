@@ -7,6 +7,8 @@ export interface CartItemDto {
   gia: number;
   hinhAnh?: string;
   soLuong: number;
+  soLuongTon?: number; // Backend trả về SoLuongTon
+  maSp?: string;       // Frontend tự mapping thêm vào để điều hướng
 }
 
 export interface CartDto {

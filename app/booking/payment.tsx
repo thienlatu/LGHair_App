@@ -22,7 +22,7 @@ import { WebView } from 'react-native-webview';
 import PrimaryButton from '../../components/PrimaryButton';
 import ErrorModal from '../../components/ui/ErrorModal';
 import { useAuthStore } from '../../src/stores/useAuthStore';
-import { bookingApi, BookingFinalRequest } from '../../src/services/bookingApi';
+import { bookingApi, BookingFinalRequest, ProductCheckoutRequest } from '../../src/services/bookingApi';
 import { useCheckoutStore } from '../../src/stores/useCheckoutStore';
 import { calculateShippingFee } from '../../src/utils/shippingCalculator';
 
@@ -181,7 +181,6 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
   // States quản lý luồng thanh toán VNPay
   const [paymentUrlToOpen, setPaymentUrlToOpen] = useState<string | null>(null);
   const [pendingMaHd, setPendingMaHd] = useState<string | null>(null);
-  const [isServiceOnlyFlow, setIsServiceOnlyFlow] = useState<boolean>(false);
 
   const [fullName, setFullName] = useState(user?.hoTen || '');
   const [phone, setPhone] = useState(user?.sdt || '');
@@ -192,11 +191,22 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
   const [depositMode, setDepositMode] = useState<DepositMode>('full100');
   const [voucherCode, setVoucherCode] = useState('');
   const [productPaymentMethod, setProductPaymentMethod] = useState<ProductPaymentMethod>('vnpay');
-  const [stackPreview, setStackPreview] = useState({ totalDiscount: 0, finalAmount: 0 });
+  const [stackPreview, setStackPreview] = useState({
+    totalDiscount: 0,
+    finalAmount: 0,
+    memberDiscount: 0,
+    voucherAmount: 0,
+    memberRankPercent: 0
+  });
 
+
+  // [BÀN GIAO LOGIC]: KHÔNG ĐƯỢC XÓA ĐOẠN NÀY!
+  // Tại C#, biến `spLaOnline` chỉ được = true khi `ReceiveType == "home"`.
+  // Nghĩa là nếu Pickup tại tiệm, Backend sẽ CẤM thanh toán online cho sản phẩm.
+  // Frontend bắt buộc phải ép về COD để đảm bảo số tiền gọi VNPay khớp tuyệt đối với Backend.
   useEffect(() => {
-    if (deliveryMode === 'pickup' && productPaymentMethod !== 'vnpay') {
-      setProductPaymentMethod('vnpay');
+    if (deliveryMode === 'pickup' && productPaymentMethod !== 'COD') {
+      setProductPaymentMethod('COD');
     }
   }, [deliveryMode]);
 
@@ -212,42 +222,81 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
   const deliveryFee = (isDelivery() && hasProduct() && deliveryAddress) ? calculateShippingFee(30, deliveryAddress) : 0;
   const totalDiscount = stackPreview.totalDiscount;
 
-  const serviceAfterVoucher = Math.max(0, servicesSubtotal - totalDiscount);
-  const remainingDiscount = Math.max(0, totalDiscount - servicesSubtotal);
-  const productAfterVoucher = Math.max(0, productsSubtotal - remainingDiscount);
+  // --- ĐỒNG BỘ LOGIC BACKEND C# ---
+  // Tái tạo luồng trừ tiền ưu tiên dịch vụ:
+  // decimal serviceDiscount = Math.Min(tongGiamGia, serviceSubTotal);
+  const serviceDiscountApplied = Math.min(totalDiscount, servicesSubtotal);
+  const productDiscountApplied = Math.min(Math.max(0, totalDiscount - servicesSubtotal), productsSubtotal);
+
+  const serviceAfterVoucher = servicesSubtotal - serviceDiscountApplied;
+  const productAfterVoucher = productsSubtotal - productDiscountApplied;
 
   const productsNet = productAfterVoucher + deliveryFee;
   const netTotal = combinedSubTotal + deliveryFee - totalDiscount;
+
+  // Auto-fetch rank discount when total or user changes
+  useEffect(() => {
+    if (combinedSubTotal === 0) return;
+
+    const fetchDiscount = async () => {
+      try {
+        const itemIds = [...selectedServices.map(s => s.id), ...cartItems.map(p => p.id)].join(',');
+        const res = await bookingApi.previewVoucherStack({
+          maKH: user?.maKH || 'GUEST',
+          codes: voucherCode, // Keep existing voucher if applied
+          subTotal: combinedSubTotal,
+          ngayGioHen: bookingDate && bookingTime ? `${bookingDate}T${bookingTime}:00` : undefined,
+          itemIds
+        });
+        setStackPreview({
+          totalDiscount: Number(res.totalDiscount) || 0,
+          finalAmount: Number(res.finalAmount) || combinedSubTotal,
+          memberDiscount: Number(res.memberDiscount) || 0,
+          voucherAmount: Number(res.voucherAmount) || 0,
+          memberRankPercent: Number(res.memberRankPercent) || 0
+        });
+      } catch (e) {
+        // Fallback: clear voucher discount but keep member discount
+        setStackPreview(prev => ({
+          ...prev,
+          totalDiscount: prev.memberDiscount,
+          finalAmount: combinedSubTotal - prev.memberDiscount,
+          voucherAmount: 0
+        }));
+      }
+    };
+
+    fetchDiscount();
+  }, [combinedSubTotal, user?.maKH, selectedServices, cartItems, voucherCode, bookingDate, bookingTime]);
 
   let dueNowService = 0;
   let dueNowProduct = 0;
 
   if (hasService()) {
-    if (isPickupAtStore() && hasProduct()) {
-      dueNowService = depositMode === 'deposit10' ? (netTotal * 0.1) : netTotal;
-      dueNowProduct = 0;
-    } else {
-      dueNowService = depositMode === 'deposit10' ? (serviceAfterVoucher * 0.1) : serviceAfterVoucher;
-    }
+    dueNowService = depositMode === 'deposit10' ? (servicesSubtotal * 0.1) : serviceAfterVoucher;
   }
 
   if (hasProduct()) {
-    if (isDelivery() || !hasService()) {
-      dueNowProduct = productPaymentMethod === 'vnpay' ? productsNet : 0;
-    }
+    dueNowProduct = productPaymentMethod === 'vnpay' ? productsNet : 0;
   }
 
-  const dueNow = dueNowService + dueNowProduct;
+  let rawDueNow = dueNowService + dueNowProduct;
+  // Chốt chặn đồng bộ với Backend: backendPaidAmount = Math.Min(backendGrandTotal, backendPaidAmount);
+  const dueNow = Math.min(netTotal, rawDueNow);
   // Khôi phục lại dòng tính toán số tiền trả tại tiệm
   const dueAtStore = netTotal - dueNow;
 
-  const depositBase = (isPickupAtStore() && hasProduct()) ? netTotal : serviceAfterVoucher;
   const depositSubtitle = useMemo(() => {
-    const depositAmt = depositBase * 0.1;
-    const remain = depositBase - depositAmt;
-    return `${formatPrice(depositAmt)}  thanh toán tại tiệm ${formatPrice(remain)}`;
-  }, [depositBase]);
-  const fullSubtitle = useMemo(() => `${formatPrice(depositBase)}  không cần trả thêm tại tiệm`, [depositBase]);
+    const depositAmt = servicesSubtotal * 0.1;
+    const remain = netTotal - depositAmt - dueNowProduct;
+    return `${formatPrice(depositAmt)}  thanh toán tại tiệm ${formatPrice(remain > 0 ? remain : 0)}`;
+  }, [servicesSubtotal, netTotal, dueNowProduct]);
+
+  const fullSubtitle = useMemo(() => {
+    const fullAmt = serviceAfterVoucher;
+    const remain = netTotal - fullAmt - dueNowProduct;
+    return `${formatPrice(fullAmt)}  thanh toán tại tiệm ${formatPrice(remain > 0 ? remain : 0)}`;
+  }, [serviceAfterVoucher, netTotal, dueNowProduct]);
 
   const formatDateDisplay = (apiDate: string) => {
     const parts = apiDate.split('-');
@@ -288,11 +337,19 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
       });
       setStackPreview({
         totalDiscount: Number(res.totalDiscount) || 0,
-        finalAmount: Number(res.finalAmount) || combinedSubTotal
+        finalAmount: Number(res.finalAmount) || combinedSubTotal,
+        memberDiscount: Number(res.memberDiscount) || 0,
+        voucherAmount: Number(res.voucherAmount) || 0,
+        memberRankPercent: Number(res.memberRankPercent) || 0
       });
     } catch (e: any) {
       setErrorMsg(e.response?.data?.message || 'Mã giảm giá không hợp lệ.');
-      setStackPreview({ totalDiscount: 0, finalAmount: combinedSubTotal });
+      setStackPreview(prev => ({
+        ...prev,
+        totalDiscount: prev.memberDiscount,
+        finalAmount: combinedSubTotal - prev.memberDiscount,
+        voucherAmount: 0
+      }));
     } finally {
       setVoucherLoading(false);
     }
@@ -313,13 +370,77 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
       setIsSubmitting(true);
       setLoading(true);
 
-      const checkoutType = (hasService() && hasProduct())
-        ? 'DAT_LICH_VA_MUA_SAN_PHAM'
-        : hasService() ? 'CHI_DAT_LICH' : 'CHI_MUA_SAN_PHAM';
+      // ================= LUỒNG 1: CHỈ ĐẶT DỊCH VỤ =================
+      if (hasService() && !hasProduct()) {
+        const bookingPayload: BookingFinalRequest = {
+          MaKh: user?.maKH || '',
+          HoTen: fullName,
+          Phone: phone,
+          Email: email,
+          BookingId: `LD${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`,
+          Services: selectedServices.map(s => ({ Id: s.id, Price: s.price })),
+          MaCodes: voucherCode ? [voucherCode] : [],
+          NgayHen: bookingDate && bookingTime
+            ? new Date(`${bookingDate}T${bookingTime}:00`).toISOString()
+            : new Date().toISOString(),
+        };
 
-      // PAYLOAD CHUẨN VIẾT HOA THEO ĐÚNG CHECKOUT_SUMMARY_REQUEST CỦA BACKEND
+        const paymentModeParam = depositMode === 'deposit10' ? '10' : '100';
+        const res = await bookingApi.submitBooking(
+          bookingPayload,
+          paymentModeParam,
+          stylistId || undefined,
+          'vnpay'
+        );
+
+        if (res?.url) {
+          setPendingMaHd(res.maLd);
+          setPaymentUrlToOpen(res.url);
+        } else {
+          // BE lưu thành công, không cần thanh toán online
+          clearCheckout();
+          router.replace(`/booking/payment-result?isCOD=true&maHd=${res.maLd}` as any);
+        }
+        return;
+      }
+
+      // ================= LUỒNG 2: CHỈ MUA SẢN PHẨM =================
+      if (!hasService() && hasProduct()) {
+        const productPayload: ProductCheckoutRequest = {
+          MaKh: user?.maKH || '',
+          HoTen: fullName,
+          Phone: phone,
+          Email: email,
+          Address: isDelivery() ? deliveryAddress : undefined,
+          Products: cartItems.map(p => ({
+            MaBienThe: p.id,
+            GiaBan: p.price,
+            SoLuong: p.quantity
+          })),
+          ShippingFee: deliveryFee,
+          PaymentMethod: productPaymentMethod,
+          VoucherIds: voucherCode ? [voucherCode] : [],
+        };
+
+        const res = await bookingApi.submitProductOrder(productPayload);
+
+        if (res?.url) {
+          // VNPay — mở WebView
+          setPendingMaHd(res.maHd || res.maDh);
+          setPaymentUrlToOpen(res.url);
+        } else {
+          // COD — redirect thẳng
+          clearCheckout();
+          router.replace(
+            `/booking/payment-result?isCOD=true&maHd=${res.maHd || res.maDh}` as any
+          );
+        }
+        return;
+      }
+
+      // ================= LUỒNG 3: ĐẶT GỘP (DV + SP) =================
       const payload: any = {
-        CheckoutType: checkoutType,
+        CheckoutType: 'DAT_LICH_VA_MUA_SAN_PHAM',
         MaKh: user?.maKH || '',
         CustomerName: fullName,
         Phone: phone,
@@ -351,42 +472,17 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
         PaymentMode: depositMode === 'deposit10' ? '10' : '100',
         ServicePaymentMethod: "vnpay",
         ProductPaymentMethod: productPaymentMethod,
-        InvoiceInfo: {
-          LaDoanhNghiep: false,
-          EmailNhanHD: email,
-          DiaChiXuatHD: deliveryAddress || 'Nhận tại cửa hàng'
-        }
       };
 
-      if (hasService() && !hasProduct()) {
-        // LUỒNG CHỈ ĐẶT DỊCH VỤ (DatDichVu):
-        // Bước 1: Gọi createPayment để lấy link VNPay trước, không gọi submitBooking ngay
-        setIsServiceOnlyFlow(true);
-        const resPay = await bookingApi.createPayment({
-          Amount: dueNow,
-          OrderDescription: 'vnpay',
-        });
-        if (resPay && resPay.url) {
-          setPaymentUrlToOpen(resPay.url);
-        } else {
-          setErrorMsg('Không thể tạo liên kết thanh toán VNPay.');
-        }
-        return;
-      }
-
-      setIsServiceOnlyFlow(false);
       const res = await bookingApi.submitCheckout(payload);
 
       if (res && res.success) {
-        clearCheckout(); // Lưu DB thành công thì xóa sạch giỏ hàng
-
         if (res.isOnlinePayment && res.url) {
-          // Lưu mã Hóa Đơn lại để truyền qua màn hình kết quả
           setPendingMaHd(res.maHd);
-          // Mở Popup VNPay
           setPaymentUrlToOpen(res.url);
         } else {
-          // Với đơn COD: Chuyển hướng kèm theo mã maHd luôn để gọi get-receipt & gửi Mail
+          // COD: Chuyển hướng kèm mã maHd để gọi get-receipt & gửi Mail
+          clearCheckout();
           router.replace(`/booking/payment-result?isCOD=true&maHd=${res.maHd}` as any);
         }
       }
@@ -574,16 +670,34 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
                   <Text style={styles.orderTotalValue}>{formatPrice(netTotal)}</Text>
                 </View>
                 {hasService() && (
-                  <View style={styles.summaryLineRow}>
-                    <Text style={styles.orderTotalSubLabel}>+ Tiền dịch vụ</Text>
-                    <Text style={styles.orderTotalSubValue}>{formatPrice(servicesSubtotal - (totalDiscount > 0 ? totalDiscount : 0))}</Text>
-                  </View>
+                  <>
+                    <View style={styles.summaryLineRow}>
+                      <Text style={styles.orderTotalSubLabel}>+ Tiền dịch vụ</Text>
+                      <Text style={styles.orderTotalSubValue}>{formatPrice(serviceAfterVoucher)}</Text>
+                    </View>
+                    {serviceDiscountApplied > 0 && (
+                      <View style={styles.summaryLineRow}>
+                        {/* <Text style={[styles.orderTotalSubLabel, { color: '#E90D0D', fontSize: scale(11) }]}>
+                          {'   '}(Đã giảm {formatPrice(serviceDiscountApplied)} từ mã giảm giá)
+                        </Text> */}
+                      </View>
+                    )}
+                  </>
                 )}
                 {hasProduct() && (
-                  <View style={styles.summaryLineRow}>
-                    <Text style={styles.orderTotalSubLabel}>+ Tiền sản phẩm (đã có ship)</Text>
-                    <Text style={styles.orderTotalSubValue}>{formatPrice(productsNet)}</Text>
-                  </View>
+                  <>
+                    <View style={styles.summaryLineRow}>
+                      <Text style={styles.orderTotalSubLabel}>+ Tiền sản phẩm </Text>
+                      <Text style={styles.orderTotalSubValue}>{formatPrice(productsNet)}</Text>
+                    </View>
+                    {productDiscountApplied > 0 && (
+                      <View style={styles.summaryLineRow}>
+                        <Text style={[styles.orderTotalSubLabel, { color: '#E90D0D', fontSize: scale(11) }]}>
+                          {'   '}(Đã giảm {formatPrice(productDiscountApplied)} từ mã giảm giá)
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 )}
               </View>
 
@@ -648,46 +762,13 @@ export default function PaymentScreen({ vnpayLogoUri = VNPAY_LOGO }: PaymentScre
 
                   // 3. Chuyển hướng về trang Kết Quả trên App kèm theo toàn bộ QueryString & maHd
                   // Trang Kết Quả sẽ dùng maHd để gọi API get-receipt và kích hoạt gửi mail giống hệt Web
+                  // Tất cả luồng đều đã gọi submit API trước khi mở VNPay
+                  // Chỉ cần redirect kèm maHd đã lưu sẵn từ bước submit
                   if (queryString.includes('vnp_ResponseCode=00')) {
-                    if (isServiceOnlyFlow) {
-                      // BƯỚC 3: KHI THANH TOÁN VNPAY THÀNH CÔNG -> GỌI API LƯU LỊCH HẸN VÀO DB
-                      const randomSuffix = Math.floor(1000 + Math.random() * 9000).toString();
-                      const generatedBookingId = `LD${Date.now()}${randomSuffix}`;
-                      const bookingPayload: BookingFinalRequest = {
-                        MaKh: user?.maKH || 'GUEST',
-                        HoTen: fullName,
-                        Phone: phone,
-                        Email: email,
-                        BookingId: generatedBookingId,
-                        Services: selectedServices.map((s) => ({ Id: s.id, Price: s.price })),
-                        MaCodes: voucherCode ? [voucherCode] : [],
-                        NgayHen: bookingDate && bookingTime
-                          ? new Date(`${bookingDate}T${bookingTime}:00`).toISOString()
-                          : new Date().toISOString(),
-                        InvoiceInfo: {
-                          LaDoanhNghiep: false,
-                          EmailNhanHD: email,
-                          DiaChiXuatHD: 'Nhận tại cửa hàng',
-                        },
-                      };
-
-                      const paymentModeParam = depositMode === 'deposit10' ? '10' : '100';
-                      bookingApi
-                        .submitBooking(bookingPayload, paymentModeParam, stylistId || undefined)
-                        .then((resBooking) => {
-                          clearCheckout();
-                          router.replace(
-                            `/booking/payment-result?${queryString}&maHd=${resBooking.maLd}` as any
-                          );
-                        })
-                        .catch((err) => {
-                          console.log('--- LỖI LƯU ĐẶT LỊCH SAU THANH TOÁN ---', err);
-                          setErrorMsg('Lỗi lưu lịch hẹn sau khi thanh toán thành công.');
-                        });
-                    } else {
-                      router.replace(`/booking/payment-result?${queryString}&maHd=${pendingMaHd}` as any);
-                      // Không setProcessingResult(false) vì đang replace route
-                    }
+                    clearCheckout();
+                    router.replace(
+                      `/booking/payment-result?${queryString}&maHd=${pendingMaHd}` as any
+                    );
                   } else {
                     router.replace(`/booking/payment-result?${queryString}` as any);
                   }

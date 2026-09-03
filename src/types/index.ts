@@ -1,10 +1,17 @@
 export interface serviceImage {
   maHa: number;
   duongDan: string;
+}
 
+export interface PagedResponse<T> {
+  success: boolean;
+  services?: T[];
+  combos?: ComboItem[];
+  data?: T[];
+  $values?: T[]; 
 }
 export interface Category {
-  maDm: string;
+  maDM: string;
   tenDanhMuc: string;
   hinhAnh?: string | null; 
   ngayTao?: string;
@@ -84,6 +91,10 @@ export interface Service {
   whatToExpect?: string[];
   giaGoc?: number;
   phanTramGiam?: number;
+  flashSale?: {
+    phanTramGiam: number;
+    ngayKetThuc: string;
+  };
 }
 
 export interface ChiTietTieuDe {

@@ -46,9 +46,16 @@ useEffect(() => {
       if (maHd) {
         try {
           if (maHd.startsWith('SP')) {
+            // LUỒNG 2: Xác nhận đơn Sản Phẩm
             await bookingApi.confirmProductPayment(maHd, responseCode);
           } 
-          else if (maHd.startsWith('TH') || maHd.startsWith('LD')) {
+          else if (maHd.startsWith('LD')) {
+            // LUỒNG 1: Xác nhận đặt Dịch Vụ
+            const vnpTxnRef = params.vnp_TxnRef as string || maHd;
+            await bookingApi.confirmServicePayment(vnpTxnRef, responseCode);
+          }
+          else if (maHd.startsWith('TH')) {
+            // LUỒNG 3: Xác nhận đơn gộp (DV + SP)
             await bookingApi.getReceipt(maHd, responseCode);
           }
           

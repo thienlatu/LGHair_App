@@ -64,7 +64,7 @@ export default function SearchModal({
         </View>
         <FlatList
           data={filteredSearchResults}
-          keyExtractor={(item: any, index) => searchMode === 'service' ? item.id : `booking_search_${index}`}
+          keyExtractor={(item: any, index) => String(searchMode === 'service' ? item.id : (item.maBienThe || item.maSp || 'search')) + '_' + index}
           contentContainerStyle={{ padding: scale(16), gap: scale(12) }}
           ListEmptyComponent={
             searchQuery ? (

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Dimensions, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -36,6 +36,7 @@ export interface CartLineItem {
   quantity: number;
   image?: string;
   loai?: string;
+  stock?: number;
 }
 
 interface CartItemRowProps {
@@ -43,6 +44,7 @@ interface CartItemRowProps {
   onIncrease: () => void;
   onDecrease: () => void;
   onRemove: () => void;
+  onChangeQuantity?: (qty: number) => void;
 }
 
 export default function CartItemRow({
@@ -50,9 +52,24 @@ export default function CartItemRow({
   onIncrease,
   onDecrease,
   onRemove,
+  onChangeQuantity,
 }: CartItemRowProps) {
   const router = useRouter();
   const isFontIcon = item.image && (item.image.startsWith('fas ') || item.image.startsWith('fa-'));
+  const [localQty, setLocalQty] = React.useState(item.quantity.toString());
+
+  React.useEffect(() => {
+    setLocalQty(item.quantity.toString());
+  }, [item.quantity]);
+
+  const handleBlur = () => {
+    let val = parseInt(localQty, 10);
+    if (isNaN(val) || val < 1) {
+      val = 1;
+    }
+    setLocalQty(val.toString());
+    onChangeQuantity?.(val);
+  };
 
   return (
     <Pressable 
@@ -61,7 +78,7 @@ export default function CartItemRow({
         if (item.loai === 'DICHVU' || item.loai === 'COMBO') {
           router.push(`/service/${item.id}` as any);
         } else {
-          router.push(`/product/${(item as any).maSp || item.id}` as any);
+          router.push(`/product/${item.maSp || item.id}` as any);
         }
       }}
     >
@@ -79,6 +96,11 @@ export default function CartItemRow({
         <Text style={styles.cartName} numberOfLines={2}>{item.name}</Text>
         {item.variant ? <Text style={styles.cartVariant}>{item.variant}</Text> : null}
         <Text style={styles.cartPrice}>{formatPrice(item.price)}</Text>
+        {item.stock !== undefined && (
+          <Text style={{ fontSize: scale(11), color: '#888', marginTop: scale(2) }}>
+            Kho: {item.stock}
+          </Text>
+        )}
       </View>
 
       <View style={styles.cartActions}>
@@ -89,7 +111,14 @@ export default function CartItemRow({
           <Pressable onPress={onDecrease} style={styles.qtyBtn} hitSlop={8}>
             <Text style={styles.qtyBtnText}>–</Text>
           </Pressable>
-          <Text style={styles.qtyValue}>{item.quantity}</Text>
+          <TextInput 
+            style={[styles.qtyValue, { padding: 0, textAlign: 'center', minWidth: scale(30) }]}
+            value={localQty}
+            onChangeText={(text) => setLocalQty(text.replace(/[^0-9]/g, ''))}
+            onBlur={handleBlur}
+            keyboardType="number-pad"
+            returnKeyType="done"
+          />
           <Pressable onPress={onIncrease} style={styles.qtyBtn} hitSlop={8}>
             <Text style={styles.qtyBtnText}>+</Text>
           </Pressable>

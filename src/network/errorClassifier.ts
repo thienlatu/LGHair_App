@@ -16,23 +16,12 @@ export interface AppError {
 }
 
 export async function classifyError(error: any): Promise<AppError> {
-  const netState = await NetInfo.fetch();
-  const isOnline = netState.isConnected && netState.isInternetReachable !== false;
-
-  // 1. Kiểm tra offline (hoặc lỗi offline trước khi gửi)
-  if (!isOnline) {
-    return {
-      type: ErrorType.OFFLINE_BEFORE_SEND,
-      message: 'Vui lòng kiểm tra kết nối Internet rồi thử lại.',
-      originalError: error
-    };
-  }
-
-  // 2. Lỗi hủy request từ AbortController
+  // Bỏ NetInfo.fetch() vì trên Emulator/Thiết bị mạng yếu nó sẽ block thread rất lâu gây lag
+  // 1. Lỗi hủy request từ AbortController
   if (error.name === 'CanceledError' || error.message === 'canceled') {
     return {
       type: ErrorType.ABORTED,
-      message: 'Request bị huỷ bỏ.',
+      message: 'Yêu cầu bị huỷ bỏ.',
       originalError: error
     };
   }

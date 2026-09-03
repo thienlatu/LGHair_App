@@ -35,7 +35,7 @@ export default function Header() {
 
         {/* Right Icons */}
         <View style={styles.rightIcons}>
-          <Pressable style={styles.iconButton} onPress={() => router.push('/')}>
+          <Pressable style={styles.iconButton} onPress={() => router.push('/support/support')}>
             <Feather name="message-circle" size={22} color={Colors.light.text} />
           </Pressable>
           <Pressable style={styles.iconButton} onPress={() => router.push('/cart')}>

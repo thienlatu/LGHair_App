@@ -16,11 +16,7 @@ export function getBackoffDelay(retryCount: number): number {
 }
 
 export async function shouldRetry(error: AxiosError, config: CustomAxiosRequestConfig): Promise<boolean> {
-  const netState = await NetInfo.fetch();
-  if (!netState.isConnected || netState.isInternetReachable === false) {
-    return false;
-  }
-
+  // Bỏ chặn NetInfo để tránh lag Emulator
   const currentRetryCount = config.retryCount || 0;
   if (currentRetryCount >= MAX_RETRIES) {
     return false;
