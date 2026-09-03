@@ -182,10 +182,10 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 22 }}
             ItemSeparatorComponent={() => <View style={{ width: 18 }} />}
-            keyExtractor={(item, index) => item.maDm?.toString() || index.toString()}
+            keyExtractor={(item, index) => item.maDM?.toString() || index.toString()}
             renderItem={({ item }) => (
               <Pressable style={styles.categoryItem} onPress={() => {
-                const catId = item.maDm;
+                const catId = item.maDM;
                 router.navigate({ pathname: '/(tabs)/services', params: { category: catId } });
               }}>
                 <View style={styles.categoryImageContainer}>

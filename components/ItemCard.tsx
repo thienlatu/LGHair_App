@@ -32,6 +32,7 @@ interface ItemCardProps {
   price: number;
   iconName?: keyof typeof Feather.glyphMap;
   onOptionsPress?: () => void;
+  onPress?: () => void;
 }
 
 export default function ItemCard({
@@ -41,29 +42,32 @@ export default function ItemCard({
   price,
   iconName = 'trash-2',
   onOptionsPress,
+  onPress,
 }: ItemCardProps) {
   const isFontIcon = image && (image.startsWith('fas ') || image.startsWith('fa-'));
   const imgUrl = getImageUrl(image);
 
   return (
     <View style={styles.itemCard}>
-      {!isFontIcon && (
-        <View style={styles.itemThumbWrap}>
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.imagePlaceholder, justifyContent: 'center', alignItems: 'center' }]}>
-            <Feather name="box" size={scale(20)} color={COLORS.muted} />
+      <Pressable onPress={onPress} style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}>
+        {!isFontIcon && (
+          <View style={styles.itemThumbWrap}>
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.imagePlaceholder, justifyContent: 'center', alignItems: 'center' }]}>
+              <Feather name="box" size={scale(20)} color={COLORS.muted} />
+            </View>
+            {imgUrl ? (
+              <Image source={{ uri: imgUrl }} style={styles.itemThumb} contentFit="cover" />
+            ) : null}
           </View>
-          {imgUrl ? (
-            <Image source={{ uri: imgUrl }} style={styles.itemThumb} contentFit="cover" />
-          ) : null}
-        </View>
-      )}
-
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName} numberOfLines={2}>{name}</Text>
-        {typeof durationMinutes === 'number' && (
-          <Text style={styles.itemDuration}>{durationMinutes} phút</Text>
         )}
-      </View>
+
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName} numberOfLines={2}>{name}</Text>
+          {typeof durationMinutes === 'number' && (
+            <Text style={styles.itemDuration}>{durationMinutes} phút</Text>
+          )}
+        </View>
+      </Pressable>
 
       <View style={styles.itemRight}>
         <Text style={styles.itemPrice}>{formatPrice(price)}</Text>

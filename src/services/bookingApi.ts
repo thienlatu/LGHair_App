@@ -29,9 +29,13 @@ export interface Voucher {
   expiry: string;
 }
 
-export interface PaymentRequest {
-  Amount: number;
-  OrderDescription: string;
+export interface VoucherStackPreviewResponse {
+  totalDiscount: number;
+  finalAmount: number;
+  memberDiscount: number;
+  voucherAmount: number;
+  memberRankPercent: number;
+  codes: string[];
 }
 
 export interface CheckoutSummaryRequest {
@@ -85,10 +89,10 @@ export interface BookingFinalRequest {
   HoTen: string;
   Phone: string;
   Email: string;
-  BookingId: string; // Chuỗi > 10 ký tự, vd: "LD" + Date.now() + Math.floor(...)
+  BookingId: string;
   Services: { Id: string; Price: number }[];
   MaCodes: string[];
-  NgayHen: string; // ISO 8601 DateTime string
+  NgayHen: string;
   InvoiceInfo?: {
     LaDoanhNghiep: boolean;
     TenCongTy?: string;
@@ -101,6 +105,15 @@ export interface BookingFinalRequest {
 export interface BookingFinalResponse {
   message: string;
   maLd: string;
+  url?: string;
+}
+
+export interface CheckStylistRequest {
+  NgayHen: string;
+  GioBatDau: string;
+  TongThoiGian: number;
+  MaKh?: string;
+  Phone?: string;
 }
 
 export const bookingApi = {
@@ -116,8 +129,8 @@ export const bookingApi = {
     return response.data;
   },
 
-  // Tìm thợ rảnh theo ngày giờ
-  getAvailableStylists: async (payload: { NgayHen: string; GioBatDau: string; TongThoiGian: number }) => {
+  // Tìm thợ rảnh theo ngày giờ (Bổ sung Phone để quét chính chủ)
+  getAvailableStylists: async (payload: CheckStylistRequest) => {
     const response = await apiClient.post('/api/DatDichVu/get-available-stylists', payload);
     return response.data;
   },
@@ -129,42 +142,32 @@ export const bookingApi = {
   },
 
   // Xem trước giá sau khi áp voucher
-  previewVoucherStack: async (params: { maKH: string; codes?: string; subTotal: number; ngayGioHen?: string; itemIds?: string }) => {
+  previewVoucherStack: async (params: { maKH: string; codes?: string; subTotal: number; ngayGioHen?: string; itemIds?: string }): Promise<VoucherStackPreviewResponse> => {
     const response = await apiClient.get('/api/ThanhToanTong/preview-voucher-stack', { params });
     return response.data;
   },
 
-  // Tạo URL thanh toán (MoMo / VNPay)
-  createPayment: async (payload: { Amount: number; OrderDescription: string }) => {
-    const response = await apiClient.post('/api/DatDichVu/create-payment', payload);
-    return response.data; // { url: string }
-  },
-
-  // Lưu đặt lịch (Chỉ mua dịch vụ)
-  submitBooking: async (payload: BookingFinalRequest, paymentMode: string, maStylist?: string): Promise<BookingFinalResponse> => {
+  // ================= LUỒNG 1: CHỈ ĐẶT DỊCH VỤ =================
+  submitBooking: async (payload: BookingFinalRequest, paymentMode: string, maStylist?: string, paymentMethod?: string): Promise<BookingFinalResponse> => {
     const response = await apiClient.post('/api/DatDichVu/save-booking-final', payload, {
-      params: { paymentMode, maStylist }
+      params: { paymentMode, maStylist, paymentMethod } // Đã thêm paymentMethod để BE tạo link
     });
     return response.data;
   },
 
-  // Lưu đặt lịch & thanh toán (Có dịch vụ hoặc Gộp)
-  submitCheckout: async (payload: CheckoutSummaryRequest) => {
-    const response = await apiClient.post('/api/ThanhToanTong/submit-checkout', payload);
+  confirmServicePayment: async (vnp_TxnRef: string, vnp_ResponseCode?: string, resultCode?: string) => {
+    const response = await apiClient.get('/api/DatDichVu/payment-callback', {
+      params: { vnp_TxnRef, vnp_ResponseCode, resultCode, orderId: vnp_TxnRef }
+    });
     return response.data;
   },
 
-  // Lưu đặt hàng sản phẩm (Chỉ mua sản phẩm)
+  // ================= LUỒNG 2: CHỈ ĐẶT SẢN PHẨM =================
   submitProductOrder: async (payload: ProductCheckoutRequest) => {
     const response = await apiClient.post('/api/ThanhToanSanPham/submit-product-order', payload);
     return response.data;
   },
 
-  // =====================================================================
-  // CÁC API XÁC NHẬN THANH TOÁN KHI VNPAY/MOMO TRẢ VỀ (DÙNG Ở TRANG KẾT QUẢ)
-  // =====================================================================
-
-  // 1. Xác nhận cho luồng "Chỉ mua sản phẩm" (Controller: ThanhToanSanPhamController)
   confirmProductPayment: async (orderId: string, vnp_ResponseCode?: string, resultCode?: string) => {
     const response = await apiClient.get('/api/ThanhToanSanPham/confirm-payment', {
       params: { orderId, vnp_ResponseCode, resultCode }
@@ -172,7 +175,12 @@ export const bookingApi = {
     return response.data;
   },
 
-  // 2. Lấy biên lai và xác nhận cho luồng "Tổng"
+  // ================= LUỒNG 3: ĐẶT TỔNG GỘP CẢ HAI =================
+  submitCheckout: async (payload: CheckoutSummaryRequest) => {
+    const response = await apiClient.post('/api/ThanhToanTong/submit-checkout', payload);
+    return response.data;
+  },
+
   getReceipt: async (maHd: string, vnp_ResponseCode?: string, resultCode?: string) => {
     const response = await apiClient.get('/api/ThanhToanTong/get-receipt', {
       params: { maHd, vnp_ResponseCode, resultCode }

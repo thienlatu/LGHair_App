@@ -49,32 +49,50 @@ export default function ProductDetailScreen() {
     setError(null);
     try {
       const normalizedId = Array.isArray(id) ? id[0] : id;
-      let targetMaSp = normalizedId;
       
-      const { PRODUCTS } = useDataStore.getState();
-      if (PRODUCTS && PRODUCTS.length > 0) {
-        const foundProduct = PRODUCTS.find(p => p.maBienThe === normalizedId || p.maSp === normalizedId);
-        if (foundProduct && foundProduct.maSp) {
-          targetMaSp = foundProduct.maSp;
+      let response;
+      try {
+        // Cố gắng gọi API lấy chi tiết sản phẩm với ID truyền vào (Kỳ vọng là maSp)
+        response = await apiClient.get(`/api/SanPham/${normalizedId}`);
+      } catch (error: any) {
+        const is404 = error.response?.status === 404 || error.appError?.originalError?.response?.status === 404;
+        
+        // CƠ CHẾ AN TOÀN CHO HÀNG CŨ TRONG GIỎ:
+        // Nếu API trả về 404, có thể id truyền vào đang là Mã Biến Thể (do giỏ hàng cũ chưa có maSp)
+        // Ta gọi API ThanhToanTong để bóc ra maSp thật từ mã biến thể này.
+        if (is404) {
+          try {
+            const fallbackRes = await apiClient.get('/api/ThanhToanTong/get-products');
+            const foundProduct = fallbackRes.data?.data?.find((p: any) => p.maBienThe === normalizedId);
+            
+            if (foundProduct && foundProduct.maSp) {
+              // Đã tìm ra maSp thật, gọi lại API chi tiết sản phẩm
+              response = await apiClient.get(`/api/SanPham/${foundProduct.maSp}`);
+            } else {
+              throw error; // Không tìm thấy maSp thật thì ném lỗi 404 gốc
+            }
+          } catch (fallbackError) {
+            throw error; // Nếu API fallback lỗi thì vẫn ném lỗi 404 gốc
+          }
+        } else {
+          throw error; // Lỗi khác (500, network) thì ném thẳng
         }
       }
 
-      const response = await apiClient.get(`/api/SanPham/${targetMaSp}`);
       setProduct(response.data);
-      if (response.data.bienThes && response.data.bienThes.length > 0) {
-        const targetBienThe = response.data.bienThes.find((bt: any) => bt.maBienThe === normalizedId);
-        if (targetBienThe) {
-          setSelectedBienThe(targetBienThe);
-        } else {
-          setSelectedBienThe(response.data.bienThes[0]);
-        }
+
+      // Logic tự động chọn biến thể chuẩn (chỉ auto-select nếu có đúng 1 biến thể)
+      if (response.data.bienThes && response.data.bienThes.length === 1) {
+        setSelectedBienThe(response.data.bienThes[0]);
+      } else {
+        setSelectedBienThe(null); 
       }
     } catch (error: any) {
       console.error('Error fetching product detail:', error);
-      if (error.message === 'Network Error') {
+      if (error.message === 'Network Error' || error.appError?.type === 'NETWORK_FAILURE') {
         setError('Không có kết nối mạng. Vui lòng kiểm tra lại đường truyền.');
       } else {
-        setError(error.response?.data?.message || 'Không thể tải dữ liệu sản phẩm. Vui lòng thử lại.');
+        setError(error.response?.data?.message || error.appError?.originalError?.response?.data?.message || 'Không thể tải dữ liệu sản phẩm. Vui lòng thử lại.');
       }
     } finally {
       setLoading(false);
@@ -136,7 +154,7 @@ export default function ProductDetailScreen() {
     }
     
     try {
-      await addVariant(selectedBienThe.maBienThe, 1);
+      await addVariant(selectedBienThe.maBienThe, 1, product.maSp);
       showToast('Đã thêm sản phẩm vào giỏ hàng!', 'success');
     } catch (error: any) {
       showToast(`Lỗi khi thêm: ${error.response?.data?.message || error.message || JSON.stringify(error)}`, 'error');
@@ -162,7 +180,7 @@ export default function ProductDetailScreen() {
     }
     
     try {
-      await addVariant(selectedBienThe.maBienThe, 1);
+      await addVariant(selectedBienThe.maBienThe, 1, product.maSp);
       router.push('/cart');
     } catch (error: any) {
       showToast(`Lỗi khi mua hàng: ${error.response?.data?.message || error.message || JSON.stringify(error)}`, 'error');

@@ -6,6 +6,7 @@ interface CartItem {
   price: number;
   quantity: number;
   image?: string;
+  stock?: number; // Thêm tồn kho
 }
 
 interface ServiceItem {

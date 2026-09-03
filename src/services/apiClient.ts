@@ -126,7 +126,8 @@ apiClient.interceptors.response.use(
 
     // Nếu không phải 401 hoặc refresh thất bại, hoặc không được retry, classify lỗi chuẩn hóa
     const classifiedError = await classifyError(error);
-    return Promise.reject(classifiedError);
+    error.appError = classifiedError; // Đính kèm appError vào original error để các component khác có thể dùng nếu cần
+    return Promise.reject(error); // Vẫn reject original error để giữ nguyên tính chất isAxiosError
   }
 );
 

@@ -74,18 +74,17 @@ export default function ServicesScreen() {
                   <Text style={[styles.categoryText, activeCategory === 'all' && styles.categoryTextActive]}>Tất cả</Text>
                 </Pressable>
                 
-                {CATEGORIES.map(cat => {
-                  const catId = cat.maDm; // Tuân thủ API Schema, không đoán mò
-                  return (
+                {CATEGORIES.map(cat => (
                   <Pressable 
-                    key={catId}
-                    style={[styles.categoryTab, activeCategory === catId && styles.categoryTabActive]}
-                    onPress={() => setActiveCategory(catId)}
+                    key={cat.maDM} 
+                    style={[styles.categoryTab, activeCategory === cat.maDM && styles.categoryTabActive]}
+                    onPress={() => setActiveCategory(cat.maDM)}
                   >
-                    <Text style={[styles.categoryText, activeCategory === catId && styles.categoryTextActive]}>{cat.tenDanhMuc}</Text>
+                    <Text style={[styles.categoryText, activeCategory === cat.maDM && styles.categoryTextActive]}>
+                      {cat.tenDanhMuc}
+                    </Text>
                   </Pressable>
-                  );
-                })}
+                ))}
               </ScrollView>
             </View>
           )}

@@ -238,22 +238,25 @@ export default function OrderConfirmationScreen() {
     try {
       setLoading(true);
 
-      // Lấy danh sách dịch vụ & combo trực tiếp từ Zustand (đã cache) thay vì gọi API chậm
-      const mappedServices = (SERVICES || []).map(s => ({
-        id: s.maDv,
-        name: s.tenDv,
-        price: s.gia,
-        originalPrice: s.gia, // Cập nhật lại giá gốc
-        duration: s.thoiGianLam || 30,
-        icon: "fas fa-cut"
-      }));
+      const mappedServices = (SERVICES || []).map(s => {
+        const hasFlashSale = s.flashSale && s.flashSale?.phanTramGiam > 0;
+        const discountedPrice = hasFlashSale ? s.gia - (s.gia * s.flashSale!.phanTramGiam / 100) : s.gia;
+        return {
+          id: s.maDv,
+          name: s.tenDv,
+          price: discountedPrice,
+          originalPrice: s.gia,
+          duration: s.thoiGianLam || 30,
+          icon: "fas fa-cut"
+        };
+      });
 
-      const mappedCombos = (COMBOS || []).map(c => ({
-        id: c.maCb || c.id,
-        name: c.tenCombo || c.name,
-        price: c.gia || c.price,
-        originalPrice: c.gia,
-        duration: c.thoiGianLam || c.duration || 30,
+      const mappedCombos = (COMBOS || []).map((c: any) => ({
+        id: c.id,
+        name: c.tenCombo,
+        price: c.gia,
+        originalPrice: c.giaGoc || c.gia,
+        duration: 30,
         icon: "fas fa-layer-group"
       }));
 
@@ -317,37 +320,30 @@ export default function OrderConfirmationScreen() {
     setSelectedServiceIds(prev => prev.filter(s => s !== id));
   };
 
-  const handleAddProductToCart = (product: ProductListItem) => {
-    const productId = product.maBienThe || product.maSp;
-    const productName = product.tenBienThe ? `${product.tenSp} - ${product.tenBienThe}` : product.tenSp;
-    const productPrice = product.giaBan || product.giaTu || 0;
+  const handleAddProductToCart = async (product: ProductListItem) => {
+    try {
+      setLoading(true);
+      let maBienThe = product.maBienThe;
 
-    // Lưu state cũ để rollback
-    const previousCartItems = [...cartItems];
-
-    // Optimistic UI Update
-    setCartItems(prev => {
-      const exists = prev.find(item => item.id === productId);
-      if (exists) {
-        return prev.map(item => item.id === productId ? { ...item, quantity: item.quantity + 1 } : item);
+      // Nếu chưa có mã biến thể, fetch chi tiết để lấy mã biến thể duy nhất
+      if (!maBienThe) {
+        const res = await apiClient.get(`/api/SanPham/${product.maSp}`);
+        if (res.data?.bienThes?.length > 0) {
+          maBienThe = res.data.bienThes[0].maBienThe;
+        }
       }
-      return [...prev, {
-        id: productId,
-        loai: 'BIENTHE',
-        name: productName,
-        price: productPrice,
-        quantity: 1,
-        image: product.hinhAnhDaiDien
-      }];
-    });
 
-    // Background Global Sync
-    useCartStore.getState().addVariant(productId, 1).catch((e) => {
-      // Rollback
-      setCartItems(previousCartItems);
-      const serverMsg = e.response?.data?.message || e.message;
-      setErrorMsg(`Lỗi: ${serverMsg}`);
-    });
+      if (maBienThe) {
+        await useCartStore.getState().addVariant(maBienThe, 1, product.maSp);
+        // Thành công (không cần toast vì icon giỏ hàng tự cập nhật số lượng)
+      } else {
+        setErrorMsg('Không tìm thấy thông tin phân loại sản phẩm.');
+      }
+    } catch (e: any) {
+      setErrorMsg('Lỗi khi thêm: ' + (e.response?.data?.message || e.message));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpdateCartQuantity = (id: string, delta: number) => {
@@ -367,6 +363,27 @@ export default function OrderConfirmationScreen() {
     if (item) {
       const newQty = Math.max(1, item.quantity + delta);
       useCartStore.getState().updateQuantity(id, item.loai || 'BIENTHE', newQty).catch(e => {
+        setCartItems(previousCartItems);
+        const serverMsg = e.response?.data?.message || e.message;
+        setErrorMsg(`Lỗi: ${serverMsg}`);
+      });
+    }
+  };
+
+  const handleSetCartQuantity = (id: string, qty: number) => {
+    const previousCartItems = [...cartItems];
+
+    // Optimistic UI Update
+    setCartItems(prev =>
+      prev.map(item =>
+        item.id === id ? { ...item, quantity: qty } : item
+      )
+    );
+
+    // Background Global Sync
+    const item = cartItems.find(i => i.id === id);
+    if (item) {
+      useCartStore.getState().updateQuantity(id, item.loai || 'BIENTHE', qty).catch(e => {
         setCartItems(previousCartItems);
         const serverMsg = e.response?.data?.message || e.message;
         setErrorMsg(`Lỗi: ${serverMsg}`);
@@ -468,10 +485,7 @@ export default function OrderConfirmationScreen() {
     }
 
     // 2. Check in COMBOS
-    const fullCombo = (COMBOS || []).find(c => c.maCb === svc.id);
-    if (fullCombo?.hinhAnhs && fullCombo.hinhAnhs.length > 0) {
-      return fullCombo.hinhAnhs[0].duongDan;
-    }
+    const fullCombo = (COMBOS || []).find(c => c.id === svc.id);
     if (fullCombo?.hinhAnh) {
       return fullCombo.hinhAnh;
     }
@@ -548,6 +562,7 @@ export default function OrderConfirmationScreen() {
                     onIncrease={() => handleUpdateCartQuantity(item.id, 1)}
                     onDecrease={() => handleUpdateCartQuantity(item.id, -1)}
                     onRemove={() => handleRemoveCartItem(item.id)}
+                    onChangeQuantity={(qty) => handleSetCartQuantity(item.id, qty)}
                   />
                 ))}
               </View>
@@ -580,11 +595,12 @@ export default function OrderConfirmationScreen() {
             <View style={styles.cardList}>
               {suggestedProducts.map((p, index) => (
                 <ItemCard
-                  key={p.maBienThe || p.maSp || index.toString()}
+                  key={`${p.maBienThe || p.maSp || 'prod'}_${index}`}
                   image={p.hinhAnhDaiDien}
                   name={`${p.tenSp} - ${p.tenBienThe || ''}`}
                   price={p.giaBan || p.giaTu || 0}
                   iconName="plus"
+                  onPress={() => router.push(`/product/${p.maSp}` as any)}
                   onOptionsPress={() => handleAddProductToCart(p)}
                 />
               ))}
